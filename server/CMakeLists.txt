@@ -1,7 +1,15 @@
 ﻿add_executable(server
     main.cpp
     TCPServer.cpp
- "TCPConnection.h" "TCPConnection.cpp")
+    TCPConnection.h
+    TCPConnection.cpp
+    PacketParser.cpp
+    PacketParser.h
+    PacketBuilder.h
+    PacketBuilder.cpp
+    Executor.h
+    Executor.cpp
+)
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}

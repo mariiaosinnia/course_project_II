@@ -6,7 +6,7 @@
 
 constexpr size_t USERNAME_MAX_LEN = 32;
 constexpr size_t ROOM_NAME_MAX_LEN = 32;
-constexpr size_t ERROR_MSG_MAX_LEN = 64;
+constexpr size_t MESSAGE_MAX_LEN = 64;
 
 enum class PacketType : uint8_t {
     // client → server
@@ -38,10 +38,12 @@ enum class PacketType : uint8_t {
 };
 
 enum class ErrorCode : uint8_t {
+    NoError = 0x00,
     RoomNotFound = 0x01,
     RoomFull = 0x02,
     AlreadyInRoom = 0x03,
     NotInRoom = 0x04,
+    Unknown
     //InvalidTrack = 0x05,
     //UsernameTaken = 0x06,
 };
@@ -51,6 +53,13 @@ enum class ErrorCode : uint8_t {
 struct PacketHeader {
     uint8_t type;
     uint16_t payload_size;
+};
+
+struct ResultPacket {
+    bool success;
+    PacketType packet_type;
+    std::vector<uint8_t> data;
+    ErrorCode error_code;
 };
 
 // Client → Server
@@ -76,7 +85,7 @@ struct JoinRoomBody {
 // Server → Client
 
 struct ConnectedBody {
-    uint16_t client_id;
+    uint32_t client_id;
 };
  
 struct RoomCreatedBody {
@@ -84,7 +93,7 @@ struct RoomCreatedBody {
 };
  
 struct UserInfo {
-    uint16_t client_id;
+    uint32_t client_id;
     char username[USERNAME_MAX_LEN];
 };
 
@@ -110,12 +119,12 @@ struct RoomListHeader {
 };
  
 struct UserJoinedBody {
-    uint16_t client_id;
+    uint32_t client_id;
     char username[USERNAME_MAX_LEN];
 };
  
 struct UserLeftBody {
-    uint16_t client_id;
+    uint32_t client_id;
 };
  
 //struct TrackSyncBody {
@@ -124,16 +133,15 @@ struct UserLeftBody {
 //};
  
 struct VoiceStartedBody {
-    uint16_t client_id;
+    uint32_t client_id;
 };
  
 struct VoiceStoppedBody {
-    uint16_t client_id;
+    uint32_t client_id;
 };
- 
+
 struct ErrorBody {
     uint8_t error_code;
-    char message[ERROR_MSG_MAX_LEN];
 };
  
 // RoomLeft, Pong — no body
