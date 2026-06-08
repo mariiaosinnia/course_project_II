@@ -9,7 +9,7 @@
     PacketBuilder.cpp
     Executor.h
     Executor.cpp
-)
+ "RoomManager.h")
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}

@@ -2,7 +2,7 @@ import socket
 import struct
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect(('127.0.0.1', 12345))
+s.connect(('138.199.165.208', 12345))
 
 username = b'testuser\x00' + b'\x00' * 23 
 s.send(struct.pack('>BH', 0x01, 32) + username)
