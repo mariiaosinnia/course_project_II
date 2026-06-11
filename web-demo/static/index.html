@@ -1,0 +1,364 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Rooms</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0f0f13;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .player {
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            border-radius: 24px;
+            padding: 40px;
+            width: 380px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .title {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #666;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .track-info {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .track-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .track-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+
+        .track-status {
+            font-size: 13px;
+            color: #666;
+        }
+
+            .track-status.connected {
+                color: #4ade80;
+            }
+
+            .track-status.loading {
+                color: #facc15;
+            }
+
+            .track-status.error {
+                color: #f87171;
+            }
+
+        .progress-bar {
+            background: #2a2a3a;
+            border-radius: 4px;
+            height: 4px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #7c3aed, #a855f7);
+            height: 100%;
+            width: 0%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .time-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 32px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .btn-play {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            width: 64px;
+            height: 64px;
+            font-size: 24px;
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+        }
+
+            .btn-play:hover {
+                transform: scale(1.05);
+                box-shadow: 0 6px 24px rgba(124,58,237,0.6);
+            }
+
+            .btn-play:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+        .visualizer {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 4px;
+            height: 40px;
+            margin-bottom: 24px;
+        }
+
+        .bar {
+            width: 4px;
+            background: linear-gradient(180deg, #a855f7, #7c3aed);
+            border-radius: 2px;
+            min-height: 4px;
+            transition: height 0.1s ease;
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid #2a2a3a;
+            margin-bottom: 20px;
+        }
+
+        .users {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .user-dot {
+            width: 8px;
+            height: 8px;
+            background: #4ade80;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="player">
+        <div class="title">Study Rooms</div>
+
+        <div class="track-info">
+            <span class="track-icon">🎵</span>
+            <div class="track-name">audio.mp3</div>
+            <div class="track-status" id="status">Click play to connect</div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress" style="width: 100%; opacity: 0.5;"></div>
+        </div>
+        <div class="time-row">
+            <span id="time-current">0:00</span>
+            <span id="time-total">LIVE</span>
+        </div>
+
+        <div class="visualizer" id="visualizer">
+        </div>
+
+        <div class="controls">
+            <button class="btn-play" id="btn-play" onclick="togglePlay()">▶</button>
+        </div>
+
+        <hr class="divider">
+    </div>
+
+    <script>
+        const WS_URL = 'ws://138.199.165.208:8080';
+
+        let audioCtx = null;
+        let analyser = null;
+        let isPlaying = false;
+        let animFrame = null;
+        let ws = null;
+        let audioElement = null;
+        let bars = [];
+
+        // build visualizer bars
+        const viz = document.getElementById('visualizer');
+        for (let i = 0; i < 24; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            bar.style.height = '4px';
+            viz.appendChild(bar);
+            bars.push(bar);
+        }
+
+        function setStatus(text, cls) {
+            const el = document.getElementById('status');
+            el.textContent = text;
+            el.className = 'track-status ' + (cls || '');
+        }
+
+        function formatTime(sec) {
+            if (!sec || isNaN(sec)) return "0:00";
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function updateProgress() {
+            if (!isPlaying || !audioElement) return;
+
+            // Оновлюємо еквалайзер
+            if (analyser) {
+                const data = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(data);
+                const step = Math.floor(data.length / bars.length);
+                bars.forEach((bar, i) => {
+                    const val = data[i * step] / 255;
+                    bar.style.height = Math.max(4, val * 36) + 'px';
+                });
+            }
+
+            animFrame = requestAnimationFrame(updateProgress);
+        }
+
+        async function togglePlay() {
+            if (isPlaying) return;
+
+            const btn = document.getElementById('btn-play');
+            btn.disabled = true;
+
+            if (!audioElement) {
+                audioElement = new Audio();
+
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 64;
+
+                const source = audioCtx.createMediaElementSource(audioElement);
+                source.connect(analyser);
+                analyser.connect(audioCtx.destination);
+
+                audioElement.addEventListener('timeupdate', () => {
+                    document.getElementById('time-current').textContent = formatTime(audioElement.currentTime);
+                });
+
+                audioElement.addEventListener('ended', () => {
+                    isPlaying = false;
+                    setStatus('Stream ended', '');
+                    cancelAnimationFrame(animFrame);
+                    bars.forEach(b => b.style.height = '4px');
+                    btn.disabled = false;
+                });
+            }
+
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+
+            setStatus('Connecting...', 'loading');
+
+            try {
+                const mediaSource = new MediaSource();
+                audioElement.src = URL.createObjectURL(mediaSource);
+
+                mediaSource.addEventListener('sourceopen', () => {
+                    const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+                    let queue = [];
+
+                    const processQueue = () => {
+                        if (queue.length > 0 && !sourceBuffer.updating) {
+                            try {
+                                sourceBuffer.appendBuffer(queue.shift());
+                            } catch (e) {
+                                console.error("Buffer error:", e);
+                            }
+                        }
+                    };
+
+                    sourceBuffer.addEventListener('updateend', processQueue);
+
+                    ws = new WebSocket(WS_URL);
+                    ws.binaryType = 'arraybuffer';
+
+                    ws.onopen = () => {
+                        setStatus('Buffering stream...', 'loading');
+                        audioElement.play().catch(e => console.error("Play error:", e));
+                    };
+
+                    ws.onmessage = (event) => {
+                        queue.push(event.data);
+                        processQueue();
+
+                        if (!isPlaying) {
+                            isPlaying = true;
+                            btn.textContent = '▶';
+                            btn.disabled = false;
+                            setStatus('Live Streaming', 'connected');
+                            updateProgress();
+                        }
+                    };
+
+                    ws.onclose = () => {
+                        if (mediaSource.readyState === 'open') {
+                            mediaSource.endOfStream();
+                        }
+                        if (!isPlaying && document.getElementById('status').textContent !== 'Stream ended') {
+                            setStatus('Server closed connection', 'error');
+                            btn.disabled = false;
+                        }
+                    };
+
+                    ws.onerror = () => {
+                        setStatus('Connection error', 'error');
+                        btn.disabled = false;
+                    };
+                });
+            } catch (e) {
+                setStatus('Error: ' + e.message, 'error');
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
