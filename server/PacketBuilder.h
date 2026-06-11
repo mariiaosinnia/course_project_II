@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <cstdint>
+#include <boost/endian/conversion.hpp>
 
 #include "Protocol.h"
 
