@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -9,7 +9,7 @@ constexpr size_t ROOM_NAME_MAX_LEN = 32;
 constexpr size_t MESSAGE_MAX_LEN = 64;
 
 enum class PacketType : uint8_t {
-    // client → server
+    // client -> server
     Connect = 0x01,
     Disconnect = 0x02,
     CreateRoom = 0x03,
@@ -21,7 +21,7 @@ enum class PacketType : uint8_t {
     VoiceStop = 0x09,
     Ping = 0x0A,
 
-    // server → client
+    // server -> client
     Connected = 0x10,
     RoomCreated = 0x11,
     RoomJoined = 0x12,
@@ -37,25 +37,22 @@ enum class PacketType : uint8_t {
     Error = 0x1F,
 };
 
-enum class StatusCode : uint8_t {
-    Success = 0x00,
+enum class ErrorCode : uint8_t {
     RoomNotFound = 0x01,
     RoomFull = 0x02,
     AlreadyInRoom = 0x03,
     NotInRoom = 0x04,
     Unknown = 0xFF
-    //InvalidTrack = 0x05,
-    //UsernameTaken = 0x06,
 };
 
 #pragma pack(push, 1)
 
 struct PacketHeader {
     uint8_t type;
-    uint32_t payload_size;
+    uint16_t payload_size;
 };
 
-// Client → Server
+// Client -> Server
 
 struct ConnectBody {
     char username[USERNAME_MAX_LEN];
@@ -69,66 +66,59 @@ struct JoinRoomBody {
     uint16_t room_id;
 };
 
-//struct TrackSelectBody {
-//    uint8_t track_id;
-//};
+// LeaveRoom, ListRooms, VoiceStart, VoiceStop, Ping, Disconnect - no body
 
-// LeaveRoom, ListRooms, VoiceStart, VoiceStop, Ping, Disconnect — no body
-
-// Server → Client
+// Server -> Client
 
 struct ConnectedBody {
     uint32_t client_id;
+    // TODO (з командою): сюди ймовірно треба додати udp_port,
+    // якщо UDP-порт сервера не буде хардкодитись з обох боків.
 };
- 
+
 struct RoomCreatedBody {
     uint16_t room_id;
 };
- 
+
 struct UserInfo {
     uint32_t client_id;
     char username[USERNAME_MAX_LEN];
 };
 
-// RoomJoined — dynamic payload
-// [ room_id: 2 ][ track_id: 1 ][ track_position_ms: 4 ][ user_count: 1 ][ UserInfo × user_count ]
+// RoomJoined - dynamic payload
+// [ room_id: 2 ][ track_id: 2 ][ track_position_ms: 4 ][ user_count: 1 ][ UserInfo x user_count ]
 struct RoomJoinedHeader {
     uint16_t room_id;
     uint16_t track_id;
     uint32_t track_position_ms;
     uint8_t user_count;
 };
- 
+
 struct RoomListEntry {
     uint16_t room_id;
     char name[ROOM_NAME_MAX_LEN];
     uint8_t user_count;
 };
- 
-// RoomList — dynamic payload
-// [ room_count: 1 ][ RoomListEntry × room_count ]
+
+// RoomList - dynamic payload
+// [ room_count: 1 ][ RoomListEntry x room_count ]
 struct RoomListHeader {
     uint8_t room_count;
 };
- 
+
 struct UserJoinedBody {
     uint32_t client_id;
     char username[USERNAME_MAX_LEN];
 };
- 
+
 struct UserLeftBody {
     uint32_t client_id;
 };
- 
-//struct TrackSyncBody {
-//    uint8_t track_id;
-//    uint32_t track_position_ms;
-//};
- 
+
 struct VoiceStartedBody {
     uint32_t client_id;
 };
- 
+
 struct VoiceStoppedBody {
     uint32_t client_id;
 };
@@ -136,7 +126,7 @@ struct VoiceStoppedBody {
 struct ErrorBody {
     uint8_t error_code;
 };
- 
-// RoomLeft, Pong — no body
+
+// RoomLeft, Pong - no body
 
 #pragma pack(pop)

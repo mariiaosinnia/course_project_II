@@ -9,8 +9,15 @@ add_executable(server
     PacketBuilder.cpp
     Executor.h
     Executor.cpp
-        TCPServer.h
-)
+    RoomManager.cpp
+    RoomManager.h
+    User.h
+    UserManager.h  
+    UserManager.cpp
+        UserManager.cpp
+        ../client/PacketBuilder.cpp
+        ../client/TCPClient.cpp
+        ../client/UdpRegistration.h)
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}
@@ -27,5 +34,6 @@ if(WIN32)
 else()
     target_link_libraries(server PRIVATE
         Boost::headers
+        pthread
     )
 endif()
