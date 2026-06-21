@@ -14,10 +14,8 @@ add_executable(server
     User.h
     UserManager.h  
     UserManager.cpp
-        UserManager.cpp
-        ../client/PacketBuilder.cpp
-        ../client/TCPClient.cpp
-        ../client/UdpRegistration.h)
+    Server.h 
+    Server.cpp)
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}

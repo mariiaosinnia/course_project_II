@@ -2,8 +2,8 @@
 #include "RoomManager.h"
 #include "PacketBuilder.h"
 
-Executor::Executor(std::shared_ptr<RoomManager> rm)
-    : room_manager(std::move(rm))
+Executor::Executor(RoomManager& rm)
+    : room_manager(rm)
 {
 }
 
@@ -39,7 +39,7 @@ std::vector<uint8_t> Executor::handle_create_room(User& user, const std::vector<
         return PacketBuilder::error(StatusCode::Unknown);
     }
     std::string name(parsed->name, strnlen(parsed->name, ROOM_NAME_MAX_LEN));
-    uint16_t room_id = room_manager->create_room(name);
+    uint16_t room_id = room_manager.create_room(name);
     return PacketBuilder::room_created(room_id);
 }
 
@@ -49,21 +49,21 @@ std::vector<uint8_t> Executor::handle_join_room(User& user, const std::vector<ui
         return PacketBuilder::error(StatusCode::Unknown);
     }
 
-    StatusCode status = room_manager->join_room(user, parsed->room_id);
+    StatusCode status = room_manager.join_room(user, parsed->room_id);
     if (status != StatusCode::Success) {
         return PacketBuilder::error(status);
     }
 
-    std::vector<UserInfo> users_in_room = room_manager->get_users_in_room(parsed->room_id);
+    std::vector<UserInfo> users_in_room = room_manager.get_users_in_room(parsed->room_id);
 
     RoomJoinedHeader rj_header;
     rj_header.room_id = boost::endian::native_to_big(parsed->room_id);
     rj_header.track_id = 0;
-    rj_header.track_position_ms = 0;
+    rj_header.track_position_ms = boost::endian::native_to_big(room_manager.get_current_position(parsed->room_id));
     rj_header.user_count = static_cast<uint8_t>(users_in_room.size());
 
     std::vector<uint8_t> packet = PacketBuilder::user_joined(user.id, user.name.c_str());
-    room_manager->broadcast_to_room(parsed->room_id, packet, user);
+    room_manager.broadcast_to_room(parsed->room_id, packet, user);
 
     return PacketBuilder::room_joined(rj_header, users_in_room);
 }
@@ -74,17 +74,17 @@ std::vector<uint8_t> Executor::handle_leave_room(User& user) {
     }
 
     uint16_t room_id = user.room_id;
-    StatusCode status = room_manager->leave_room(user, room_id);
+    StatusCode status = room_manager.leave_room(user, room_id);
     if (status != StatusCode::Success) return PacketBuilder::error(status);
 
     std::vector<uint8_t>
         packet = PacketBuilder::user_left(user.id);
-    room_manager->broadcast_to_room(room_id, packet, user);
+    room_manager.broadcast_to_room(room_id, packet, user);
 
     return PacketBuilder::room_left();
 }
 
 std::vector<uint8_t> Executor::handle_list_rooms() {
-    std::vector<RoomListEntry> rooms = room_manager->list_rooms();
+    std::vector<RoomListEntry> rooms = room_manager.list_rooms();
     return PacketBuilder::room_list(rooms);
 }

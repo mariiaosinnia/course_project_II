@@ -1,24 +1,22 @@
-#include <iostream>
 #include "TCPConnection.h"
 #include "RoomManager.h"
+#include <iostream>
 
-TCPConnection::TCPConnection(boost::asio::io_context& io_context,
+TCPConnection::TCPConnection(
+    boost::asio::io_context& io,
     std::function<void(uint32_t)> callback,
-    std::shared_ptr<RoomManager> room_manager)
-    : socket(io_context),
-    disconnect_callback(std::move(callback)),
-    room_manager_(std::move(room_manager)),
-    executor(room_manager_)
+    RoomManager& room_manager)
+    : socket(io), disconnect_callback(std::move(callback)), executor(room_manager)
 {
 }
 
 std::shared_ptr<TCPConnection> TCPConnection::create(
-    boost::asio::io_context& io_context,
+    boost::asio::io_context& io,
     std::function<void(uint32_t)> callback,
-    std::shared_ptr<RoomManager> room_manager)
+    RoomManager& room_manager)
 {
     return std::shared_ptr<TCPConnection>(
-        new TCPConnection(io_context, std::move(callback), std::move(room_manager)));
+        new TCPConnection(io, std::move(callback), room_manager));
 }
 
 boost::asio::ip::tcp::socket& TCPConnection::get_socket() {
