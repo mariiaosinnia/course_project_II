@@ -37,7 +37,8 @@ enum class PacketType : uint8_t {
     Error = 0x1F,
 };
 
-enum class ErrorCode : uint8_t {
+enum class StatusCode : uint8_t {
+    Success = 0x00,
     RoomNotFound = 0x01,
     RoomFull = 0x02,
     AlreadyInRoom = 0x03,
@@ -51,7 +52,7 @@ enum class ErrorCode : uint8_t {
 
 struct PacketHeader {
     uint8_t type;
-    uint16_t payload_size;
+    uint32_t payload_size;
 };
 
 // Client → Server

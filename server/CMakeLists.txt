@@ -9,7 +9,10 @@ add_executable(server
     PacketBuilder.cpp
     Executor.h
     Executor.cpp
-)
+    RoomManager.cpp
+    RoomManager.h
+    User.h
+ "UserManager.h" "UserManager.cpp")
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}
