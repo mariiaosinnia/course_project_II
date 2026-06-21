@@ -12,7 +12,8 @@ add_executable(server
     RoomManager.cpp
     RoomManager.h
     User.h
- "UserManager.h" "UserManager.cpp")
+    UserManager.h  
+    UserManager.cpp)
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}
@@ -29,5 +30,6 @@ if(WIN32)
 else()
     target_link_libraries(server PRIVATE
         Boost::headers
+        pthread
     )
 endif()
