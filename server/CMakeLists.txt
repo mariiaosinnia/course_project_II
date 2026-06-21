@@ -9,6 +9,7 @@ add_executable(server
     PacketBuilder.cpp
     Executor.h
     Executor.cpp
+        TCPServer.h
 )
 
 target_include_directories(server PRIVATE
