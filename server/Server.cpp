@@ -9,5 +9,15 @@ Server::Server()
 
 void Server::run() {
     std::cout << "Server running...\n";
-    io_context.run();
+
+    std::thread tcp_thread([this] {
+        io_context.run();
+        });
+
+    // std::thread udp_thread([this] {
+    //     udp_server.run();
+    // });
+
+    tcp_thread.join();
+    // udp_thread.join();
 }
