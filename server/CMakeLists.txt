@@ -13,7 +13,9 @@ add_executable(server
     RoomManager.h
     User.h
     UserManager.h  
-    UserManager.cpp)
+    UserManager.cpp
+    Server.h 
+    Server.cpp)
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}

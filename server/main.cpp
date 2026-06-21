@@ -1,21 +1,13 @@
-﻿#include <boost/asio.hpp>
-
-#include "TCPServer.h"
+﻿#include "Server.h"
 #include <iostream>
 
-int main()
-{
-    try
-    {
-        boost::asio::io_context io_context;
-        TCPServer server(io_context);
-        std::cout << "io_context running..." << std::endl;
-        io_context.run();
-        std::cout << "io_context stopped" << std::endl;
+int main() {
+    try {
+        Server server;
+        server.run();
     }
-    catch (std::exception& e)
-    {
-        std::cerr << e.what() << std::endl;
+    catch (std::exception& e) {
+        std::cerr << e.what() << "\n";
     }
-	return 0;
+    return 0;
 }

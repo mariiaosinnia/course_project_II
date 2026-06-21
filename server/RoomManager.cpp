@@ -79,7 +79,7 @@ std::vector<UserInfo> RoomManager::get_users_in_room(uint16_t room_id) const {
     for (uint32_t id : it->second.user_ids) {
         UserInfo info;
         info.client_id = id;
-        User* user = user_manager->get(id);
+        User* user = user_manager.get(id);
         if (user) {
             std::strncpy(info.username, user->name.c_str(), USERNAME_MAX_LEN - 1);
             info.username[USERNAME_MAX_LEN - 1] = '\0';
@@ -110,4 +110,13 @@ void RoomManager::broadcast_to_room(uint16_t room_id, const std::vector<uint8_t>
 
         broadcast_fn(user_id, packet);
     }
+}
+
+uint32_t RoomManager::get_current_position(uint16_t room_id) const {
+    std::shared_lock lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it == rooms.end()) {
+        return 0;
+    }
+    return it->second.get_current_position_ms();
 }
