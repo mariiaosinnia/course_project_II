@@ -1,4 +1,8 @@
 #include <iostream>
+#include <sstream>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 #include <boost/asio.hpp>
 #include <boost/endian/conversion.hpp>
@@ -14,15 +18,19 @@ namespace {
 constexpr const char* SERVER_HOST = "127.0.0.1";
 constexpr uint16_t SERVER_TCP_PORT = 12345;
 
-// Стан застосунку. У реальному клієнті це окремий клас ClientState
-// з mutex'ом, бо до нього лізтиме і мережевий потік, і UI-потік (FTXUI).
-// Тут навмисно спрощено - лише щоб показати логіку диспетчера.
+std::mutex cout_mutex;
+
+void print(const std::string& msg)
+{
+    std::lock_guard<std::mutex> lock(cout_mutex);
+    std::cout << msg << "\n";
+}
+
 struct ClientState {
-    uint32_t client_id = 0;
+    std::atomic<uint32_t> client_id{0};
+    std::atomic<bool> connected{false};
 };
 
-// Реєстрація на UDP - окрема дія, не через TCPClient.
-// Відкриває власний UDP-сокет і шле один пакет на UDP-порт сервера.
 void send_udp_registration(boost::asio::io_context& io_context, uint32_t client_id)
 {
     using boost::asio::ip::udp;
@@ -38,19 +46,125 @@ void send_udp_registration(boost::asio::io_context& io_context, uint32_t client_
     udp_socket.send_to(boost::asio::buffer(&packet, sizeof(packet)), server_endpoint, 0, ec);
 
     if (ec) {
-        std::cerr << "UDP registration failed: " << ec.message() << "\n";
+        print("UDP registration failed: " + ec.message());
+    } else {
+        print("UDP registration sent for client_id=" + std::to_string(client_id));
     }
-    else {
-        std::cout << "UDP registration sent for client_id=" << client_id << "\n";
-    }
-
-    // У реальному клієнті цей сокет має жити далі (зберігатись у
-    // AudioBridge чи окремому UdpClient), а не закриватись тут -
-    // він знадобиться, щоб ПРИЙМАТИ аудіо. Це поки лише демонстрація
-    // самого факту реєстрації.
 }
 
-} // namespace
+bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, ClientState& state)
+{
+    if (line.empty()) {
+        return true;
+    }
+
+    std::istringstream iss(line);
+    std::string command;
+    iss >> command;
+
+    if (command.empty() || command.front() != '/') {
+        print("Unknown input, commands start with '/'. Type /help.");
+        return true;
+    }
+    command.erase(0, 1);  // прибрати '/'
+
+    if (command == "quit") {
+        return false;
+    }
+
+    if (command == "help") {
+        print(
+            "Commands:\n"
+            "  /connect <username>\n"
+            "  /create <room_name>\n"
+            "  /join <room_id>\n"
+            "  /leave\n"
+            "  /list\n"
+            "  /ping\n"
+            "  /quit");
+        return true;
+    }
+
+    if (command == "connect") {
+        std::string username;
+        iss >> username;
+        if (username.empty()) {
+            print("Usage: /connect <username>");
+            return true;
+        }
+        client->send(PacketBuilder::connect(username));
+        return true;
+    }
+
+    if (command == "create") {
+        std::string room_name;
+        iss >> room_name;
+        if (room_name.empty()) {
+            print("Usage: /create <room_name>");
+            return true;
+        }
+        client->send(PacketBuilder::create_room(room_name));
+        return true;
+    }
+
+    if (command == "join") {
+        std::string room_id_str;
+        iss >> room_id_str;
+        if (room_id_str.empty()) {
+            print("Usage: /join <room_id>");
+            return true;
+        }
+        try {
+            uint16_t room_id = static_cast<uint16_t>(std::stoi(room_id_str));
+            client->send(PacketBuilder::join_room(room_id));
+        } catch (const std::exception&) {
+            print("Invalid room_id");
+        }
+        return true;
+    }
+
+    if (command == "leave") {
+        client->send(PacketBuilder::leave_room());
+        return true;
+    }
+
+    if (command == "list") {
+        client->send(PacketBuilder::list_rooms());
+        return true;
+    }
+
+    if (command == "ping") {
+        client->send(PacketBuilder::ping());
+        return true;
+    }
+
+    print("Unknown command: /" + command + " (type /help)");
+    return true;
+}
+
+void cli_loop(boost::asio::io_context& io_context,
+              std::shared_ptr<TCPClient> client,
+              ClientState& state)
+{
+    std::string line;
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock(cout_mutex);
+            std::cout << "> " << std::flush;
+        }
+
+        if (!std::getline(std::cin, line)) {
+            break;
+        }
+
+        if (!handle_line(line, client, state)) {
+            break;
+        }
+    }
+    io_context.stop();
+}
+
+}
 
 int main()
 {
@@ -59,78 +173,84 @@ int main()
 
     auto tcp_client = TCPClient::create(io_context);
 
-    // Диспетчер вхідних пакетів. ВАЖЛИВО: це не "одна відповідь на
-    // один запит" - UserJoined/UserLeft можуть прилетіти будь-коли,
-    // тому кожен тип обробляється незалежно.
     tcp_client->set_packet_callback(
-        [&io_context, &state, tcp_client](PacketType type, const std::vector<uint8_t>& body) {
+        [&io_context, &state](PacketType type, const std::vector<uint8_t>& body) {
             switch (type) {
             case PacketType::Connected: {
                 auto parsed = PacketParser::parse_connected(body);
                 if (!parsed) {
-                    std::cerr << "bad Connected body\n";
+                    print("bad Connected body");
                     return;
                 }
                 state.client_id = parsed->client_id;
-                std::cout << "Connected, client_id=" << state.client_id << "\n";
-
-                send_udp_registration(io_context, state.client_id);
+                state.connected = true;
+                print("Connected, client_id=" + std::to_string(parsed->client_id));
+                send_udp_registration(io_context, parsed->client_id);
                 break;
             }
             case PacketType::RoomCreated: {
                 auto parsed = PacketParser::parse_room_created(body);
                 if (!parsed) {
-                    std::cerr << "bad RoomCreated body\n";
+                    print("bad RoomCreated body");
                     return;
                 }
-                std::cout << "RoomCreated, room_id=" << parsed->room_id << "\n";
-
-                // Договір з командою: клієнт сам приєднується до
-                // щойно створеної кімнати, сервер цього не робить.
-                tcp_client->send(PacketBuilder::join_room(parsed->room_id));
+                print("RoomCreated, room_id=" + std::to_string(parsed->room_id) +
+                      " (use /join " + std::to_string(parsed->room_id) + " to enter)");
                 break;
             }
             case PacketType::UserJoined: {
                 auto parsed = PacketParser::parse_user_joined(body);
                 if (parsed) {
-                    std::cout << "UserJoined: " << parsed->username
-                        << " (id=" << parsed->client_id << ")\n";
+                    print(std::string("UserJoined: ") + parsed->username.data() +
+                          " (id=" + std::to_string(parsed->client_id) + ")");
                 }
                 break;
             }
             case PacketType::UserLeft: {
                 auto parsed = PacketParser::parse_user_left(body);
                 if (parsed) {
-                    std::cout << "UserLeft: id=" << parsed->client_id << "\n";
+                    print("UserLeft: id=" + std::to_string(parsed->client_id));
                 }
+                break;
+            }
+            case PacketType::Pong: {
+                print("Pong received");
                 break;
             }
             case PacketType::Error: {
                 auto parsed = PacketParser::parse_error(body);
                 if (parsed) {
-                    std::cerr << "Server error, code=0x" << std::hex
-                        << static_cast<int>(parsed->error_code) << std::dec << "\n";
+                    print("Server error, code=0x" +
+                          std::to_string(static_cast<int>(parsed->error_code)));
                 }
                 break;
             }
             default:
-                std::cout << "Unhandled packet type: 0x" << std::hex
-                    << static_cast<int>(type) << std::dec << "\n";
+                print("Unhandled packet type: 0x" + std::to_string(static_cast<int>(type)));
                 break;
             }
         });
 
-    tcp_client->set_disconnect_callback([]() {
-        std::cout << "Disconnected from server\n";
-        });
+    tcp_client->set_disconnect_callback([&state]() {
+        state.connected = false;
+        print("Disconnected from server");
+    });
 
-    tcp_client->connect(SERVER_HOST, SERVER_TCP_PORT, [tcp_client](bool ok) {
-        if (!ok) {
-            return;
+    tcp_client->connect(SERVER_HOST, SERVER_TCP_PORT, [](bool ok) {
+        if (ok) {
+            print("TCP connected. Type /connect <username> to register. (/help for commands)");
+        } else {
+            print("Failed to connect to server.");
         }
-        tcp_client->send(PacketBuilder::connect("daryna"));
-        });
+    });
+
+    std::thread cli_thread(cli_loop, std::ref(io_context), tcp_client, std::ref(state));
 
     io_context.run();
+
+    if (cli_thread.joinable()) {
+        cli_thread.join();
+    }
+
     return 0;
 }
