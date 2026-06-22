@@ -18,6 +18,8 @@ namespace {
 constexpr const char* SERVER_HOST = "127.0.0.1";
 constexpr uint16_t SERVER_TCP_PORT = 12345;
 
+// Захищає std::cout від одночасного запису з мережевого потоку
+// (callback-и io_context.run()) і з потоку CLI (cliLoop).
 std::mutex cout_mutex;
 
 void print(const std::string& msg)
@@ -26,6 +28,9 @@ void print(const std::string& msg)
     std::cout << msg << "\n";
 }
 
+// Стан застосунку. У реальному клієнті (з FTXUI) сюди ж писатиме
+// мережевий потік, а UI-потік читатиме - тут спрощено, бо немає UI,
+// лише CLI-потік сам формує команди.
 struct ClientState {
     std::atomic<uint32_t> client_id{0};
     std::atomic<bool> connected{false};
@@ -52,6 +57,7 @@ void send_udp_registration(boost::asio::io_context& io_context, uint32_t client_
     }
 }
 
+// Обробка одного рядка з консолі. Повертає false, якщо треба завершити цикл (/quit).
 bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, ClientState& state)
 {
     if (line.empty()) {
@@ -142,6 +148,7 @@ bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, Cli
     return true;
 }
 
+// CLI-цикл - працює в окремому потоці, читає std::cin, формує і шле пакети.
 void cli_loop(boost::asio::io_context& io_context,
               std::shared_ptr<TCPClient> client,
               ClientState& state)
@@ -154,17 +161,19 @@ void cli_loop(boost::asio::io_context& io_context,
         }
 
         if (!std::getline(std::cin, line)) {
-            break;
+            break;  // EOF / stdin закрито
         }
 
         if (!handle_line(line, client, state)) {
-            break;
+            break;  // /quit
         }
     }
+
+    // Зупиняємо io_context, щоб io_context.run() в main-потоці теж завершився.
     io_context.stop();
 }
 
-}
+}  // namespace
 
 int main()
 {
@@ -201,7 +210,7 @@ int main()
             case PacketType::UserJoined: {
                 auto parsed = PacketParser::parse_user_joined(body);
                 if (parsed) {
-                    print(std::string("UserJoined: ") + parsed->username.data() +
+                    print(std::string("UserJoined: ") + parsed->username +
                           " (id=" + std::to_string(parsed->client_id) + ")");
                 }
                 break;
@@ -244,6 +253,7 @@ int main()
         }
     });
 
+    // CLI працює у власному потоці, мережа - в io_context.run() тут, у main-потоці.
     std::thread cli_thread(cli_loop, std::ref(io_context), tcp_client, std::ref(state));
 
     io_context.run();
