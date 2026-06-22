@@ -1,17 +1,24 @@
-cmake_minimum_required(VERSION 3.16)
-project(client_skeleton CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-find_package(Boost REQUIRED)
-find_package(Threads REQUIRED)
-
-add_executable(client_skeleton
-    main.cpp
-    TCPClient.cpp
-    PacketParser.cpp
-    PacketBuilder.cpp
+add_executable(client
+        main.cpp
+        TCPClient.cpp
+        PacketParser.cpp
+        PacketBuilder.cpp
 )
 
-target_link_libraries(client_skeleton PRIVATE Boost::boost Threads::Threads)
+target_include_directories(client PRIVATE
+        ${Boost_INCLUDE_DIRS}
+        ${CMAKE_SOURCE_DIR}/shared
+)
+
+if(WIN32)
+    target_link_libraries(client PRIVATE
+            Boost::headers
+            ws2_32
+            wsock32
+    )
+    target_compile_definitions(client PRIVATE _WIN32_WINNT=0x0601)
+else()
+    target_link_libraries(client PRIVATE
+            Boost::headers
+    )
+endif()

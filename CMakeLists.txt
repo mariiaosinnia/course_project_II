@@ -10,3 +10,4 @@ if(Boost_FOUND)
 endif()
 
 add_subdirectory(server)
+add_subdirectory(client)

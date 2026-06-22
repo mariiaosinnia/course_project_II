@@ -15,7 +15,8 @@ add_executable(server
     UserManager.h  
     UserManager.cpp
     Server.h 
-    Server.cpp)
+    Server.cpp
+        ../client/main.cpp)
 
 target_include_directories(server PRIVATE
     ${Boost_INCLUDE_DIRS}
