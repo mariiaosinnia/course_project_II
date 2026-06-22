@@ -8,6 +8,13 @@ TCPServer::TCPServer(boost::asio::io_context& io, RoomManager& rm, UserManager& 
     , room_manager(rm)
     , user_manager(um)
 {
+    room_manager.set_broadcast([this](uint32_t client_id, std::vector<uint8_t> packet) {
+        auto it = active_connections.find(client_id);
+        if (it != active_connections.end()) {
+            it->second->send(packet); 
+        }
+        });
+
     acceptor.listen();
     std::cout << "TCP server listening on port: " << acceptor.local_endpoint().port() << "\n";
     start_accept();
@@ -31,6 +38,7 @@ void TCPServer::start_accept() {
         [this](uint32_t id) {
             user_manager.remove(id);
             release_id(id);
+            active_connections.erase(id);
         },
         room_manager);
 
@@ -39,6 +47,7 @@ void TCPServer::start_accept() {
             if (!ec) {
                 uint32_t id = allocate_id();
                 User* user = user_manager.add(id);
+                active_connections[id] = connection;
                 connection->start(id, user);
             }
             start_accept();

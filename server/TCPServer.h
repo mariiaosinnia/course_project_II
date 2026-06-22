@@ -1,8 +1,12 @@
 #pragma once
 #include <boost/asio.hpp>
 #include <queue>
+
 #include "UserManager.h"
 #include "RoomManager.h"
+#include "TCPConnection.h"
+
+class TCPConnection;
 
 class TCPServer {
 public:
@@ -16,6 +20,8 @@ private:
     UserManager& user_manager;
     uint32_t next_client_id = 1;
     std::priority_queue<uint32_t, std::vector<uint32_t>, std::greater<uint32_t>> free_ids;
+
+    std::unordered_map<uint32_t, std::shared_ptr<TCPConnection>> active_connections;
 
     uint32_t allocate_id();
     void release_id(uint32_t id);
