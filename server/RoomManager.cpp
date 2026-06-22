@@ -1,5 +1,9 @@
 #include "RoomManager.h"
 
+RoomManager::RoomManager(UserManager& um) : user_manager(um)
+{
+}
+
 uint16_t RoomManager::create_room(const std::string& name){
     std::unique_lock<std::shared_mutex> lock(mutex);
 
