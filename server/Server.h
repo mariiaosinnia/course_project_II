@@ -4,6 +4,7 @@
 #include "UserManager.h"
 #include "RoomManager.h"
 #include "TCPServer.h"
+#include "UdpAudioServer.h"
 
 class Server {
 public:
@@ -15,5 +16,5 @@ private:
     UserManager user_manager;
     RoomManager room_manager;
     TCPServer tcp_server;
-    // UDPServer udp_server;
+    UdpAudioServer udp_server;
 };
