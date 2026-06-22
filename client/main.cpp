@@ -222,6 +222,41 @@ int main()
                 }
                 break;
             }
+            case PacketType::RoomList: {
+                auto parsed = PacketParser::parse_room_list(body);
+                if (!parsed) {
+                    print("bad RoomList body");
+                    return;
+                }
+                std::string msg = "RoomList (" + std::to_string(parsed->rooms.size()) + "):";
+                for (const auto& room : parsed->rooms) {
+                    msg += "\n  room_id=" + std::to_string(room.room_id) +
+                           " name=" + room.name +
+                           " users=" + std::to_string(room.user_count);
+                }
+                print(msg);
+                break;
+            }
+            case PacketType::RoomJoined: {
+                auto parsed = PacketParser::parse_room_joined(body);
+                if (!parsed) {
+                    print("bad RoomJoined body");
+                    return;
+                }
+                std::string msg = "RoomJoined room_id=" + std::to_string(parsed->header.room_id) +
+                                   " track_position_ms=" + std::to_string(parsed->header.track_position_ms) +
+                                   " users(" + std::to_string(parsed->users.size()) + "):";
+                for (const auto& user : parsed->users) {
+                    msg += "\n  id=" + std::to_string(user.client_id) +
+                           " name=" + user.username;
+                }
+                print(msg);
+                break;
+            }
+            case PacketType::RoomLeft: {
+                print("RoomLeft");
+                break;
+            }
             case PacketType::Pong: {
                 print("Pong received");
                 break;
@@ -229,14 +264,20 @@ int main()
             case PacketType::Error: {
                 auto parsed = PacketParser::parse_error(body);
                 if (parsed) {
-                    print("Server error, code=0x" +
-                          std::to_string(static_cast<int>(parsed->error_code)));
+                    std::ostringstream oss;
+                    oss << "Server error, code=0x" << std::hex
+                        << static_cast<int>(parsed->error_code);
+                    print(oss.str());
                 }
                 break;
             }
-            default:
-                print("Unhandled packet type: 0x" + std::to_string(static_cast<int>(type)));
+            default: {
+                std::ostringstream oss;
+                oss << "Unhandled packet type: 0x" << std::hex
+                    << static_cast<int>(type);
+                print(oss.str());
                 break;
+            }
             }
         });
 
