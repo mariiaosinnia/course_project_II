@@ -4,7 +4,7 @@
 
 TCPServer::TCPServer(boost::asio::io_context& io, RoomManager& rm, UserManager& um)
     : io_context(io)
-    , acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
+    , acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), TCP_SERVER_PORT))
     , room_manager(rm)
     , user_manager(um)
 {

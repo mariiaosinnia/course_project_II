@@ -58,6 +58,7 @@ std::vector<uint8_t> Executor::handle_join_room(User& user, const std::vector<ui
 
     RoomJoinedHeader rj_header;
     rj_header.room_id = boost::endian::native_to_big(parsed->room_id);
+    rj_header.udp_port = UDP_SERVER_PORT;
     rj_header.track_id = 0;
     rj_header.track_position_ms = boost::endian::native_to_big(room_manager.get_current_position(parsed->room_id));
     rj_header.user_count = static_cast<uint8_t>(users_in_room.size());

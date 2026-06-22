@@ -8,6 +8,9 @@ constexpr size_t USERNAME_MAX_LEN = 32;
 constexpr size_t ROOM_NAME_MAX_LEN = 32;
 constexpr size_t MESSAGE_MAX_LEN = 64;
 
+constexpr size_t UDP_SERVER_PORT = 12346;
+constexpr size_t TCP_SERVER_PORT = 12345;
+
 enum class PacketType : uint8_t {
     // client → server
     Connect = 0x01,

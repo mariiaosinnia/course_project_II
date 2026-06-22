@@ -10,7 +10,6 @@ public:
     ~TCPServer() = default;
 
 private:
-    const int port = 12345;
     boost::asio::io_context& io_context;
     boost::asio::ip::tcp::acceptor acceptor;
     RoomManager& room_manager;
