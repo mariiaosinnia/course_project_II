@@ -4,7 +4,7 @@
 Server::Server()
     : room_manager(user_manager)
     , tcp_server(io_context, room_manager, user_manager)
-    , udp_server("udp_server/summer.mp3", 9001)
+    , udp_server("summer.mp3", 9001)
 {
 }
 

@@ -3,6 +3,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <memory>
 
 #include <boost/asio.hpp>
 #include <boost/endian/conversion.hpp>
@@ -11,15 +12,16 @@
 #include "PacketParser.h"
 #include "Protocol.h"
 #include "TCPClient.h"
-#include "UdpRegistration.h"
+#include "UDPClient.h" // Підключаємо ваш клас UdpClient
 
 namespace {
 
 constexpr const char* SERVER_HOST = "127.0.0.1";
 constexpr uint16_t SERVER_TCP_PORT = 12345;
+// Якщо порт для UDP інший, змініть його тут. Поки ставимо такий самий, як у TCP.
+constexpr uint16_t SERVER_UDP_PORT = 9001;
 
-// Захищає std::cout від одночасного запису з мережевого потоку
-// (callback-и io_context.run()) і з потоку CLI (cliLoop).
+// Захищає std::cout від одночасного запису з мережевого потоку і з потоку CLI.
 std::mutex cout_mutex;
 
 void print(const std::string& msg)
@@ -28,34 +30,14 @@ void print(const std::string& msg)
     std::cout << msg << "\n";
 }
 
-// Стан застосунку. У реальному клієнті (з FTXUI) сюди ж писатиме
-// мережевий потік, а UI-потік читатиме - тут спрощено, бо немає UI,
-// лише CLI-потік сам формує команди.
+// Стан застосунку. Зберігає вказівник на UDP клієнта та потік для його запуску.
 struct ClientState {
     std::atomic<uint32_t> client_id{0};
     std::atomic<bool> connected{false};
+
+    std::shared_ptr<UdpClient> udp_client;
+    std::unique_ptr<std::thread> udp_start_thread;
 };
-
-void send_udp_registration(boost::asio::io_context& io_context, uint32_t client_id)
-{
-    using boost::asio::ip::udp;
-
-    udp::socket udp_socket(io_context, udp::endpoint(udp::v4(), 0));
-    udp::endpoint server_endpoint(
-        boost::asio::ip::make_address(SERVER_HOST), DRAFT_UDP_PORT);
-
-    UdpRegisterPacket packet;
-    packet.client_id = boost::endian::native_to_big(client_id);
-
-    boost::system::error_code ec;
-    udp_socket.send_to(boost::asio::buffer(&packet, sizeof(packet)), server_endpoint, 0, ec);
-
-    if (ec) {
-        print("UDP registration failed: " + ec.message());
-    } else {
-        print("UDP registration sent for client_id=" + std::to_string(client_id));
-    }
-}
 
 // Обробка одного рядка з консолі. Повертає false, якщо треба завершити цикл (/quit).
 bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, ClientState& state)
@@ -122,7 +104,26 @@ bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, Cli
         }
         try {
             uint16_t room_id = static_cast<uint16_t>(std::stoi(room_id_str));
+            // 1. Надсилаємо команду по TCP
             client->send(PacketBuilder::join_room(room_id));
+
+            // 2. Створюємо окремий потік для старту UDP клієнта
+            if (state.udp_client) {
+                // Якщо потік старту вже існував з минулого разу - підчищаємо
+                if (state.udp_start_thread && state.udp_start_thread->joinable()) {
+                    state.udp_start_thread->join();
+                }
+
+                print("Starting UDP client in a separate thread...");
+                state.udp_start_thread = std::make_unique<std::thread>([udp = state.udp_client]() {
+                    if (!udp->start()) {
+                        print("Failed to start UDP client.");
+                    }
+                });
+            } else {
+                print("Error: UDP Client is not initialized. Connect to the server first!");
+            }
+
         } catch (const std::exception&) {
             print("Invalid room_id");
         }
@@ -131,6 +132,12 @@ bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, Cli
 
     if (command == "leave") {
         client->send(PacketBuilder::leave_room());
+
+        // Коли виходимо з кімнати - зупиняємо UDP (звук і прийом пакетів)
+        if (state.udp_client) {
+            state.udp_client->stop();
+            print("UDP Client stopped.");
+        }
         return true;
     }
 
@@ -148,7 +155,7 @@ bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, Cli
     return true;
 }
 
-// CLI-цикл - працює в окремому потоці, читає std::cin, формує і шле пакети.
+// CLI-цикл - працює в окремому потоці
 void cli_loop(boost::asio::io_context& io_context,
               std::shared_ptr<TCPClient> client,
               ClientState& state)
@@ -161,7 +168,7 @@ void cli_loop(boost::asio::io_context& io_context,
         }
 
         if (!std::getline(std::cin, line)) {
-            break;  // EOF / stdin закрито
+            break;
         }
 
         if (!handle_line(line, client, state)) {
@@ -169,7 +176,7 @@ void cli_loop(boost::asio::io_context& io_context,
         }
     }
 
-    // Зупиняємо io_context, щоб io_context.run() в main-потоці теж завершився.
+    // Зупиняємо io_context, щоб основний потік завершився
     io_context.stop();
 }
 
@@ -194,7 +201,14 @@ int main()
                 state.client_id = parsed->client_id;
                 state.connected = true;
                 print("Connected, client_id=" + std::to_string(parsed->client_id));
-                send_udp_registration(io_context, parsed->client_id);
+
+                // --- СТВОРЮЄМО UDP КЛІЄНТ (АЛЕ ЩЕ НЕ СТАРТУЄМО) ---
+                try {
+                    state.udp_client = std::make_shared<UdpClient>(SERVER_HOST, SERVER_UDP_PORT, parsed->client_id);
+                    print("UDP Client successfully initialized. Ready to /join.");
+                } catch (const std::exception& e) {
+                    print(std::string("UDP initialization error: ") + e.what());
+                }
                 break;
             }
             case PacketType::RoomCreated: {
@@ -284,6 +298,10 @@ int main()
     tcp_client->set_disconnect_callback([&state]() {
         state.connected = false;
         print("Disconnected from server");
+
+        if (state.udp_client) {
+            state.udp_client->stop();
+        }
     });
 
     tcp_client->connect(SERVER_HOST, SERVER_TCP_PORT, [](bool ok) {
@@ -294,13 +312,23 @@ int main()
         }
     });
 
-    // CLI працює у власному потоці, мережа - в io_context.run() тут, у main-потоці.
+    // Запуск CLI в окремому потоці
     std::thread cli_thread(cli_loop, std::ref(io_context), tcp_client, std::ref(state));
 
+    // Блокування основного потоку для роботи TCP
     io_context.run();
 
+    // --- ОЧИЩЕННЯ ТА БЕЗПЕЧНИЙ ВИХІД ---
     if (cli_thread.joinable()) {
         cli_thread.join();
+    }
+
+    if (state.udp_client) {
+        state.udp_client->stop();
+    }
+
+    if (state.udp_start_thread && state.udp_start_thread->joinable()) {
+        state.udp_start_thread->join();
     }
 
     return 0;
