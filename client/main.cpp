@@ -1,46 +1,36 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
-#include <mutex>
-#include <atomic>
-#include <memory>
 
 #include <boost/asio.hpp>
-#include <boost/endian/conversion.hpp>
 
-#include "PacketBuilder.h"
-#include "PacketParser.h"
+#include "ClientApp.h"
+#include "Logger.h"
 #include "Protocol.h"
-#include "TCPClient.h"
-#include "UDPClient.h" // Підключаємо ваш клас UdpClient
 
 namespace {
 
-constexpr const char* SERVER_HOST = "127.0.0.1";
-constexpr uint16_t SERVER_TCP_PORT = 12345;
-// Якщо порт для UDP інший, змініть його тут. Поки ставимо такий самий, як у TCP.
-constexpr uint16_t SERVER_UDP_PORT = 9001;
-
-// Захищає std::cout від одночасного запису з мережевого потоку і з потоку CLI.
-std::mutex cout_mutex;
-
-void print(const std::string& msg)
+// Хост сервера - аргумент командного рядка для віддаленого тестування,
+// з дефолтом на localhost для звичної локальної розробки.
+std::string resolve_server_host(int argc, char** argv)
 {
-    std::lock_guard<std::mutex> lock(cout_mutex);
-    std::cout << msg << "\n";
+    if (argc >= 2) {
+        return argv[1];
+    }
+    return "127.0.0.1";
 }
 
-// Стан застосунку. Зберігає вказівник на UDP клієнта та потік для його запуску.
-struct ClientState {
-    std::atomic<uint32_t> client_id{0};
-    std::atomic<bool> connected{false};
+const char* HELP_TEXT =
+    "Commands:\n"
+    "  /connect <username>\n"
+    "  /create <room_name>\n"
+    "  /join <room_id>\n"
+    "  /leave\n"
+    "  /list\n"
+    "  /ping\n"
+    "  /quit";
 
-    std::shared_ptr<UdpClient> udp_client;
-    std::unique_ptr<std::thread> udp_start_thread;
-};
-
-// Обробка одного рядка з консолі. Повертає false, якщо треба завершити цикл (/quit).
-bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, ClientState& state)
+bool handle_line(const std::string& line, ClientApp& app)
 {
     if (line.empty()) {
         return true;
@@ -51,284 +41,108 @@ bool handle_line(const std::string& line, std::shared_ptr<TCPClient> client, Cli
     iss >> command;
 
     if (command.empty() || command.front() != '/') {
-        print("Unknown input, commands start with '/'. Type /help.");
+        Logger::print("Unknown input, commands start with '/'. Type /help.");
         return true;
     }
-    command.erase(0, 1);  // прибрати '/'
+    command.erase(0, 1);
 
     if (command == "quit") {
         return false;
     }
-
     if (command == "help") {
-        print(
-            "Commands:\n"
-            "  /connect <username>\n"
-            "  /create <room_name>\n"
-            "  /join <room_id>\n"
-            "  /leave\n"
-            "  /list\n"
-            "  /ping\n"
-            "  /quit");
+        Logger::print(HELP_TEXT);
         return true;
     }
-
     if (command == "connect") {
         std::string username;
         iss >> username;
         if (username.empty()) {
-            print("Usage: /connect <username>");
+            Logger::print("Usage: /connect <username>");
             return true;
         }
-        client->send(PacketBuilder::connect(username));
+        app.send_connect(username);
         return true;
     }
-
     if (command == "create") {
         std::string room_name;
         iss >> room_name;
         if (room_name.empty()) {
-            print("Usage: /create <room_name>");
+            Logger::print("Usage: /create <room_name>");
             return true;
         }
-        client->send(PacketBuilder::create_room(room_name));
+        app.send_create_room(room_name);
         return true;
     }
-
     if (command == "join") {
         std::string room_id_str;
         iss >> room_id_str;
         if (room_id_str.empty()) {
-            print("Usage: /join <room_id>");
+            Logger::print("Usage: /join <room_id>");
             return true;
         }
         try {
-            uint16_t room_id = static_cast<uint16_t>(std::stoi(room_id_str));
-            // 1. Надсилаємо команду по TCP
-            client->send(PacketBuilder::join_room(room_id));
-
-            // 2. Створюємо окремий потік для старту UDP клієнта
-            if (state.udp_client) {
-                // Якщо потік старту вже існував з минулого разу - підчищаємо
-                if (state.udp_start_thread && state.udp_start_thread->joinable()) {
-                    state.udp_start_thread->join();
-                }
-
-                print("Starting UDP client in a separate thread...");
-                state.udp_start_thread = std::make_unique<std::thread>([udp = state.udp_client]() {
-                    if (!udp->start()) {
-                        print("Failed to start UDP client.");
-                    }
-                });
-            } else {
-                print("Error: UDP Client is not initialized. Connect to the server first!");
-            }
-
+            app.send_join_room(static_cast<uint16_t>(std::stoi(room_id_str)));
         } catch (const std::exception&) {
-            print("Invalid room_id");
+            Logger::print("Invalid room_id");
         }
         return true;
     }
-
     if (command == "leave") {
-        client->send(PacketBuilder::leave_room());
-
-        // Коли виходимо з кімнати - зупиняємо UDP (звук і прийом пакетів)
-        if (state.udp_client) {
-            state.udp_client->stop();
-            print("UDP Client stopped.");
-        }
+        app.send_leave_room();
         return true;
     }
-
     if (command == "list") {
-        client->send(PacketBuilder::list_rooms());
+        app.send_list_rooms();
         return true;
     }
-
     if (command == "ping") {
-        client->send(PacketBuilder::ping());
+        app.send_ping();
         return true;
     }
 
-    print("Unknown command: /" + command + " (type /help)");
+    Logger::print("Unknown command: /" + command + " (type /help)");
     return true;
 }
 
-// CLI-цикл - працює в окремому потоці
-void cli_loop(boost::asio::io_context& io_context,
-              std::shared_ptr<TCPClient> client,
-              ClientState& state)
+void cli_loop(boost::asio::io_context& io_context, std::shared_ptr<ClientApp> app)
 {
     std::string line;
     while (true) {
-        {
-            std::lock_guard<std::mutex> lock(cout_mutex);
-            std::cout << "> " << std::flush;
-        }
-
+        std::cout << "> " << std::flush;
         if (!std::getline(std::cin, line)) {
-            break;
+            break;  // EOF / stdin закрито
         }
-
-        if (!handle_line(line, client, state)) {
+        if (!handle_line(line, *app)) {
             break;  // /quit
         }
     }
-
-    // Зупиняємо io_context, щоб основний потік завершився
     io_context.stop();
 }
 
-}  // namespace
+}
 
-int main()
+int main(int argc, char** argv)
 {
+    const std::string server_host = resolve_server_host(argc, argv);
+    const uint16_t server_port = static_cast<uint16_t>(TCP_SERVER_PORT);
+
     boost::asio::io_context io_context;
-    ClientState state;
+    auto app = ClientApp::create(io_context);
 
-    auto tcp_client = TCPClient::create(io_context);
-
-    tcp_client->set_packet_callback(
-        [&io_context, &state](PacketType type, const std::vector<uint8_t>& body) {
-            switch (type) {
-            case PacketType::Connected: {
-                auto parsed = PacketParser::parse_connected(body);
-                if (!parsed) {
-                    print("bad Connected body");
-                    return;
-                }
-                state.client_id = parsed->client_id;
-                state.connected = true;
-                print("Connected, client_id=" + std::to_string(parsed->client_id));
-
-                // --- СТВОРЮЄМО UDP КЛІЄНТ (АЛЕ ЩЕ НЕ СТАРТУЄМО) ---
-                try {
-                    state.udp_client = std::make_shared<UdpClient>(SERVER_HOST, SERVER_UDP_PORT, parsed->client_id);
-                    print("UDP Client successfully initialized. Ready to /join.");
-                } catch (const std::exception& e) {
-                    print(std::string("UDP initialization error: ") + e.what());
-                }
-                break;
-            }
-            case PacketType::RoomCreated: {
-                auto parsed = PacketParser::parse_room_created(body);
-                if (!parsed) {
-                    print("bad RoomCreated body");
-                    return;
-                }
-                print("RoomCreated, room_id=" + std::to_string(parsed->room_id) +
-                      " (use /join " + std::to_string(parsed->room_id) + " to enter)");
-                break;
-            }
-            case PacketType::UserJoined: {
-                auto parsed = PacketParser::parse_user_joined(body);
-                if (parsed) {
-                    print(std::string("UserJoined: ") + parsed->username +
-                          " (id=" + std::to_string(parsed->client_id) + ")");
-                }
-                break;
-            }
-            case PacketType::UserLeft: {
-                auto parsed = PacketParser::parse_user_left(body);
-                if (parsed) {
-                    print("UserLeft: id=" + std::to_string(parsed->client_id));
-                }
-                break;
-            }
-            case PacketType::RoomList: {
-                auto parsed = PacketParser::parse_room_list(body);
-                if (!parsed) {
-                    print("bad RoomList body");
-                    return;
-                }
-                std::string msg = "RoomList (" + std::to_string(parsed->rooms.size()) + "):";
-                for (const auto& room : parsed->rooms) {
-                    msg += "\n  room_id=" + std::to_string(room.room_id) +
-                           " name=" + room.name +
-                           " users=" + std::to_string(room.user_count);
-                }
-                print(msg);
-                break;
-            }
-            case PacketType::RoomJoined: {
-                auto parsed = PacketParser::parse_room_joined(body);
-                if (!parsed) {
-                    print("bad RoomJoined body");
-                    return;
-                }
-                std::string msg = "RoomJoined room_id=" + std::to_string(parsed->header.room_id) +
-                                   " track_position_ms=" + std::to_string(parsed->header.track_position_ms) +
-                                   " users(" + std::to_string(parsed->users.size()) + "):";
-                for (const auto& user : parsed->users) {
-                    msg += "\n  id=" + std::to_string(user.client_id) +
-                           " name=" + user.username;
-                }
-                print(msg);
-                break;
-            }
-            case PacketType::RoomLeft: {
-                print("RoomLeft");
-                break;
-            }
-            case PacketType::Pong: {
-                print("Pong received");
-                break;
-            }
-            case PacketType::Error: {
-                auto parsed = PacketParser::parse_error(body);
-                if (parsed) {
-                    std::ostringstream oss;
-                    oss << "Server error, code=0x" << std::hex
-                        << static_cast<int>(parsed->error_code);
-                    print(oss.str());
-                }
-                break;
-            }
-            default: {
-                std::ostringstream oss;
-                oss << "Unhandled packet type: 0x" << std::hex
-                    << static_cast<int>(type);
-                print(oss.str());
-                break;
-            }
-            }
-        });
-
-    tcp_client->set_disconnect_callback([&state]() {
-        state.connected = false;
-        print("Disconnected from server");
-
-        if (state.udp_client) {
-            state.udp_client->stop();
-        }
-    });
-
-    tcp_client->connect(SERVER_HOST, SERVER_TCP_PORT, [](bool ok) {
+    app->connect(server_host, server_port, [](bool ok) {
         if (ok) {
-            print("TCP connected. Type /connect <username> to register. (/help for commands)");
+            Logger::print("TCP connected. Type /connect <username> to register. (/help for commands)");
         } else {
-            print("Failed to connect to server.");
+            Logger::print("Failed to connect to server.");
         }
     });
 
-    // Запуск CLI в окремому потоці
-    std::thread cli_thread(cli_loop, std::ref(io_context), tcp_client, std::ref(state));
+    std::thread cli_thread(cli_loop, std::ref(io_context), app);
 
-    // Блокування основного потоку для роботи TCP
     io_context.run();
 
-    // --- ОЧИЩЕННЯ ТА БЕЗПЕЧНИЙ ВИХІД ---
     if (cli_thread.joinable()) {
         cli_thread.join();
-    }
-
-    if (state.udp_client) {
-        state.udp_client->stop();
-    }
-
-    if (state.udp_start_thread && state.udp_start_thread->joinable()) {
-        state.udp_start_thread->join();
     }
 
     return 0;
