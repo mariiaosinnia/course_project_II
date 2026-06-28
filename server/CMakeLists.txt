@@ -38,6 +38,17 @@ add_executable(server
     Server.cpp
     UdpAudioServer.h
     UdpAudioServer.cpp
+    Mp3Decoder.cpp
+    Mp3Decoder.h
+    Resampler.cpp
+    Resampler.h
+    AudioEncoder.cpp
+    AudioEncoder.h
+    MusicStreamer.cpp
+    MusicStreamer.h
+    Track.h
+    UdpSocket.cpp
+    UdpSocket.h
 )
 
 target_include_directories(server PRIVATE
