@@ -22,7 +22,7 @@ struct PlaybackState {
 struct Room {
     uint16_t id;
     std::string name;
-    uint8_t max_users = 1000;
+    uint16_t max_users = 1000;
     std::unordered_set<uint32_t> user_ids;
     PlaybackState playback;
 
@@ -52,6 +52,9 @@ public:
     void set_broadcast(BroadcastFn fn);
     void broadcast_to_room(uint16_t room_id, const std::vector<uint8_t>& packet, const User& excluded_user);
     uint32_t get_current_position(uint16_t room_id) const;
+    std::vector<udp::endpoint> get_udp_endpoints(uint16_t room_id) const;
+
+    void registerUdpEndpoint(uint32_t client_id, const udp::endpoint& endpoint);
 
 private:
     mutable std::shared_mutex mutex;

@@ -1,5 +1,56 @@
-.idea/
-.vs/
-out/
+# Build directories
 build/
-CMakePresets.json
+Build/
+build_vs/
+out/
+out-build/
+cmake-build-*/
+cmake-build-*
+.cache/
+Testing/
+compile_commands.json
+CMakeUserPresets.json
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+*.ninja
+*.ninja.log
+*.ninja_deps
+*.ninja_header
+Makefile
+makefile
+
+# IDE
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.sln.docstates
+*.vcxproj.filters
+*.vcxproj.user
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Compiled binaries
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+
+# Install artifacts
+install/
+*.stamp
+
+# OS files
+.DS_Store
+Thumbs.db

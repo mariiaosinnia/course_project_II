@@ -1,4 +1,5 @@
 #include "RoomManager.h"
+#include <iostream>
 
 RoomManager::RoomManager(UserManager& um) : user_manager(um)
 {
@@ -123,4 +124,32 @@ uint32_t RoomManager::get_current_position(uint16_t room_id) const {
         return 0;
     }
     return it->second.get_current_position_ms();
+}
+
+std::vector<udp::endpoint> RoomManager::get_udp_endpoints(uint16_t room_id) const {
+    std::shared_lock lock(mutex);
+
+    auto room_it = rooms.find(room_id);
+    if (room_it == rooms.end()) return {};
+
+    std::vector<udp::endpoint> endpoints;
+    for (uint32_t user_id : room_it->second.user_ids) {
+        User* user = user_manager.get(user_id);
+        if (user && user->udp_endpoint.has_value()) {
+            endpoints.push_back(user->udp_endpoint.value());
+        }
+    }
+    return endpoints;
+}
+
+void RoomManager::registerUdpEndpoint(uint32_t client_id, const udp::endpoint& endpoint) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+
+    User* user = user_manager.get(client_id);
+    if (user == nullptr) {
+        std::cerr << "registerUdpEndpoint: user " << client_id << " not found\n";
+        return;
+    }
+
+    user->udp_endpoint = endpoint;
 }
