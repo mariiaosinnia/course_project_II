@@ -16,14 +16,13 @@ UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manage
 void UdpAudioServer::loadDefaultTracks() {
     std::lock_guard<std::mutex> lock(tracks_mutex_);
 
-    // Створюємо трек 0
     auto track = std::make_shared<Track>();
-    track->id = 0;
+    uint16_t id = next_track_id_++;  // = 1
+    track->id = id;
     track->path = "summer.mp3";
-    tracks_[0] = track;
+    tracks_[id] = track;
 
-    // Одразу готуємо його (decode + encode)
-    prepareTrack(0);
+    prepareTrack(id);
 }
 
 void UdpAudioServer::prepareTrack(int track_id) {
@@ -169,16 +168,9 @@ void UdpAudioServer::registerClient(uint32_t client_id, const udp::endpoint& end
 }
 
 void UdpAudioServer::run() {
-    auto track = std::make_shared<Track>();
-    std::lock_guard<std::mutex> lock(tracks_mutex_);
-    track->path = "summer.mp3";
-    tracks_[0] = track;
-    tracks_[0]->id = 0;
-
-    prepareTrack(0);
-
     std::cout << "UDP AudioServer listening...\n";
-
+    std::thread scheduler(&UdpAudioServer::schedulerLoop, this);
+    scheduler.detach();
     receiveLoop();
 }
 
