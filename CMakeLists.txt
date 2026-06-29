@@ -19,7 +19,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTING "Build tests" OFF)
 option(USE_FETCHCONTENT_DEPS "Download dependencies with FetchContent when system packages are unavailable" ON)
 
-cmake_policy(SET CMP0167 NEW)
 find_package(Threads REQUIRED)
 find_package(Boost REQUIRED COMPONENTS headers)
 
@@ -84,6 +83,7 @@ function(fetch_or_find_dependency dependency_name package_name repo_url tag)
     elseif(${dependency_name} STREQUAL "portaudio")
         set(PA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         set(PA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(PA_USE_ASIO OFF CACHE BOOL "" FORCE)
     endif()
 
     FetchContent_MakeAvailable(${dependency_name})

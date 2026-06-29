@@ -18,8 +18,10 @@ If vcpkg is not integrated yet:
 
 ```powershell
 & "C:\path\to\vcpkg\vcpkg.exe" integrate install
-& "C:\path\to\vcpkg\vcpkg.exe" install boost-headers
+& "C:\path\to\vcpkg\vcpkg.exe" install boost-headers portaudio
 ```
+
+The project uses FetchContent for Opus when it is not installed system-wide, so installing Opus via vcpkg is optional. If you prefer to manage all dependencies through vcpkg, you may also install `opus`.
 
 Option 2: use a manually installed Boost package and point CMake to it.
 
