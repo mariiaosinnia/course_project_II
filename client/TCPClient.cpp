@@ -47,14 +47,9 @@ void TCPClient::read_header()
 {
     boost::asio::async_read(socket,
         boost::asio::buffer(&header, sizeof(PacketHeader)),
-        [self = shared_from_this()](boost::system::error_code ec, std::size_t bytes_read) {
+        [self = shared_from_this()](boost::system::error_code ec, std::size_t) {
             if (!ec) {
                 uint16_t size = boost::endian::big_to_native(self->header.payload_size);
-                std::cerr << "[DEBUG] bytes_read=" << bytes_read
-                          << " raw_type=0x" << std::hex << static_cast<int>(self->header.type)
-                          << std::dec
-                          << " raw_payload_be=" << self->header.payload_size
-                          << " payload_size(native)=" << size << "\n";
                 self->read_body(size);
             }
             else {
