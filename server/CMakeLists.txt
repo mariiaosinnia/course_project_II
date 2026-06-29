@@ -23,19 +23,11 @@ target_include_directories(server PRIVATE
 
 target_link_libraries(server PRIVATE
     Boost::headers
-    opus
+    ${OPUS_TARGET}
+    Threads::Threads
 )
 
 if(WIN32)
-    target_link_libraries(server PRIVATE
-        ws2_32
-    )
-
-    target_compile_definitions(server PRIVATE
-        _WIN32_WINNT=0x0601
-    )
-else()
-    target_link_libraries(server PRIVATE
-        pthread
-    )
+    target_link_libraries(server PRIVATE ws2_32 wsock32)
+    target_compile_definitions(server PRIVATE _WIN32_WINNT=0x0601)
 endif()
