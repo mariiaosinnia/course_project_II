@@ -3,7 +3,7 @@
 #include <memory>
 #include <unordered_map>
 #include <mutex>
-
+#include "Protocol.h"
 #include "Track.h"
 #include "Mp3Decoder.h"
 #include "Resampler.h"
@@ -12,27 +12,32 @@
 #include "MusicStreamer.h"
 #include "RoomManager.h"
 
+struct PlaybackRoom {
+    std::shared_ptr<Track> track;
+    size_t current_packet_index = 0;
+    uint32_t sequence_number = 0;
+    std::chrono::steady_clock::time_point next_send_time;
+};
+
 class UdpAudioServer {
 public:
     explicit UdpAudioServer(unsigned short udp_port, RoomManager& room_manager);
 
-    // Завантажує трек з файлу і повертає його id
-    uint16_t loadTrack(const std::string& file_path);
+    void prepareTrack(int track_id);
 
-    // Запускає стрімінг треку для кімнати
-    void startStreaming(uint16_t room_id, uint16_t track_id);
+    void startStreaming(uint16_t room_id);
 
-    // Зупиняє стрімінг для кімнати
-    void stopStreaming(uint16_t room_id);
+    void stopStreaming();
+    void stopRoomStreaming(uint16_t room_id);
 
-    // Реєструє UDP endpoint клієнта
     void registerClient(uint32_t client_id, const udp::endpoint& endpoint);
 
-    // Головний цикл отримання пакетів реєстрації
     void run();
 
 private:
     void receiveLoop();
+    void schedulerLoop();
+    void loadDefaultTracks();
 
     RoomManager&    room_manager_;
     UdpSocket       udp_socket_;
@@ -43,6 +48,9 @@ private:
     uint16_t next_track_id_ = 1;
     std::mutex tracks_mutex_;
 
-    std::unordered_map<uint16_t, std::unique_ptr<MusicStreamer>> streamers_;
-    std::mutex streamers_mutex_;
+    std::unordered_map<uint16_t, PlaybackRoom> active_rooms_;
+    std::mutex active_rooms_mutex_;
+
+    std::atomic<bool> running {true};
+    std::thread scheduler_thread_;
 };

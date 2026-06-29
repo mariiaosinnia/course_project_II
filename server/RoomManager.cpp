@@ -13,6 +13,7 @@ uint16_t RoomManager::create_room(const std::string& name){
     Room room;
     room.id = room_id;
     room.name = name;
+    room.track_ids.push_back(0);
 
     rooms.emplace(room_id, std::move(room));
 
@@ -152,4 +153,42 @@ void RoomManager::registerUdpEndpoint(uint32_t client_id, const udp::endpoint& e
     }
 
     user->udp_endpoint = endpoint;
+}
+
+std::vector<uint16_t> RoomManager::get_active_room_ids() const {
+    std::shared_lock lock(mutex);
+    std::vector<uint16_t> ids;
+    for (const auto& [id, room] : rooms) {
+        ids.push_back(id);
+    }
+    return ids;
+}
+
+void RoomManager::start_playback(uint16_t room_id, std::chrono::steady_clock::time_point start_time) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        it->second.track_started_at = start_time;
+        it->second.is_playing = true;
+    }
+}
+
+uint16_t RoomManager::get_current_track_id(uint16_t room_id) const {
+    std::shared_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        return it->second.current_track_id();
+    }
+    return 0;
+}
+
+uint16_t RoomManager::advance_track(uint16_t room_id, std::chrono::steady_clock::time_point start_time) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        uint16_t next_id = it->second.next_track();
+        it->second.track_started_at = start_time;
+        return next_id;
+    }
+    return 0;
 }

@@ -13,26 +13,37 @@
 #include "Protocol.h"
 #include "UserManager.h"
 
-struct PlaybackState {
-    uint16_t track_id;
-    uint32_t position_ms;
-    std::chrono::steady_clock::time_point started_at;
-};
 
 struct Room {
     uint16_t id;
     std::string name;
     uint16_t max_users = 1000;
     std::unordered_set<uint32_t> user_ids;
-    PlaybackState playback;
+    std::vector<uint16_t> track_ids;
+    size_t current_track_index = 0;
+    std::chrono::steady_clock::time_point track_started_at;
+    bool is_playing = false;
 
     bool is_full() const {
         return user_ids.size() >= max_users;
     }
 
+    uint16_t current_track_id() const {
+        if (track_ids.empty()) return 0;
+        return track_ids[current_track_index];
+    }
+
+    uint16_t next_track() {
+        if (track_ids.empty()) return 0;
+        current_track_index = (current_track_index + 1) % track_ids.size();
+        return track_ids[current_track_index];
+    }
+
     uint32_t get_current_position_ms() const {
+        if (!is_playing) return 0;
         auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - playback.started_at).count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - track_started_at).count();
         return static_cast<uint32_t>(elapsed);
     }
 };
@@ -53,8 +64,14 @@ public:
     void broadcast_to_room(uint16_t room_id, const std::vector<uint8_t>& packet, const User& excluded_user);
     uint32_t get_current_position(uint16_t room_id) const;
     std::vector<udp::endpoint> get_udp_endpoints(uint16_t room_id) const;
+    std::vector<uint16_t> get_active_room_ids() const;
 
     void registerUdpEndpoint(uint32_t client_id, const udp::endpoint& endpoint);
+    void start_playback(uint16_t room_id, std::chrono::steady_clock::time_point start_time);
+    uint16_t advance_track(uint16_t room_id, std::chrono::steady_clock::time_point start_time);
+
+
+    uint16_t get_current_track_id(uint16_t room_id) const;
 
 private:
     mutable std::shared_mutex mutex;

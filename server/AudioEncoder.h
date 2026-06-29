@@ -2,6 +2,7 @@
 #include "Track.h"
 #include <opus.h>
 #include <vector>
+#include "Protocol.h"
 #include <cstdint>
 
 class AudioEncoder {
@@ -14,9 +15,6 @@ public:
         int samples_per_frame) const;
 
     static bool isSupportedRate(int rate);
-    static constexpr int TARGET_RATE = 48000;
-    static constexpr int FRAME_DURATION_MS = 20;
-    static constexpr int BITRATE = 64000;
 
 private:
     ::OpusEncoder* encoder_;
