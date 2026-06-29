@@ -12,8 +12,8 @@ cmake --build --preset windows-msvc-debug
 Run the binaries:
 
 ```powershell
-./out/build/windows-msvc/server/Debug/server.exe
-./out/build/windows-msvc/client/Debug/client.exe
+./build/windows-msvc/server/Debug/server.exe
+./build/windows-msvc/client/Debug/client.exe
 ```
 
 ### Linux (GCC or Clang)
@@ -28,7 +28,7 @@ cmake --build --preset linux-gcc-build
 ```bash
 sudo apt update
 sudo apt install -y ninja-build build-essential git cmake libboost-all-dev pkg-config
-rm -rf out/build/linux-gcc
+rm -rf build/linux-gcc
 cmake --preset linux-gcc
 cmake --build --preset linux-gcc-build
 ```
@@ -43,8 +43,8 @@ cmake --build --preset linux-clang-build
 Run the binaries:
 
 ```bash
-./out/build/linux-gcc/server/server
-./out/build/linux-gcc/client/client
+./build/linux-gcc/server/server
+./build/linux-gcc/client/client
 ```
 
 ### macOS (Clang)
@@ -57,8 +57,8 @@ cmake --build --preset macos-clang-build
 Run the binaries:
 
 ```bash
-./out/build/macos-clang/server/server
-./out/build/macos-clang/client/client
+./build/macos-clang/server/server
+./build/macos-clang/client/client
 ```
 
 ### Notes
