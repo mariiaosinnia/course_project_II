@@ -121,17 +121,13 @@ void UdpClient::send_registration() {
               << " with client_id=" << client_id_ << "\n";
     std::cout << "========================================\n";
 
-    // Пакет 1: маркер пінгу
-    std::vector<unsigned char> ping_packet{0xFF};
-    socket_.send_to(boost::asio::buffer(ping_packet), server_endpoint);
-
-    // Пакет 2: client_id (big-endian)
-    std::vector<unsigned char> id_packet(4);
-    id_packet[0] = static_cast<unsigned char>((client_id_ >> 24) & 0xFF);
-    id_packet[1] = static_cast<unsigned char>((client_id_ >> 16) & 0xFF);
-    id_packet[2] = static_cast<unsigned char>((client_id_ >> 8) & 0xFF);
-    id_packet[3] = static_cast<unsigned char>(client_id_ & 0xFF);
-    socket_.send_to(boost::asio::buffer(id_packet), server_endpoint);
+    std::vector<unsigned char> packet(5);
+    packet[0] = 0xFF;
+    packet[1] = static_cast<unsigned char>((client_id_ >> 24) & 0xFF);
+    packet[2] = static_cast<unsigned char>((client_id_ >> 16) & 0xFF);
+    packet[3] = static_cast<unsigned char>((client_id_ >> 8)  & 0xFF);
+    packet[4] = static_cast<unsigned char>( client_id_        & 0xFF);
+    socket_.send_to(boost::asio::buffer(packet), server_endpoint);
 }
 int UdpClient::pa_callback_wrapper(const void* input, void* output,
                                         unsigned long frame_count,

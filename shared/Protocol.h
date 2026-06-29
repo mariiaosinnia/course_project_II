@@ -11,6 +11,11 @@ constexpr size_t MESSAGE_MAX_LEN = 64;
 constexpr size_t UDP_SERVER_PORT = 12346;
 constexpr size_t TCP_SERVER_PORT = 12345;
 
+constexpr int FRAME_DURATION_MS = 20;
+constexpr int TARGET_RATE = 48000;
+constexpr int MAX_OPUS_PACKET_SIZE = 4000;
+static constexpr int BITRATE = 64000;
+
 enum class PacketType : uint8_t {
     // client → server
     Connect = 0x01,

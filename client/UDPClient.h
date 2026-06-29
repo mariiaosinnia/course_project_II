@@ -10,10 +10,10 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include "Protocol.h"
 
 constexpr int SAMPLE_RATE = 48000;
 constexpr int CHANNELS = 2;
-constexpr int FRAME_DURATION_MS = 20;
 constexpr int SAMPLES_PER_FRAME = SAMPLE_RATE * FRAME_DURATION_MS / 1000;
 
 // Проста потокобезпечна черга PCM-фреймів

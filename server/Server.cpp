@@ -6,6 +6,9 @@ Server::Server()
     , tcp_server(io_context, room_manager, user_manager)
     , udp_server(9001, room_manager)
 {
+    room_manager.set_on_first_user_joined([this](uint16_t room_id) {
+        udp_server.startStreaming(room_id);
+    });
 }
 
 void Server::run() {
