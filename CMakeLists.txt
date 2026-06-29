@@ -20,12 +20,12 @@ option(BUILD_TESTING "Build tests" OFF)
 option(USE_FETCHCONTENT_DEPS "Download dependencies with FetchContent when system packages are unavailable" ON)
 
 find_package(Threads REQUIRED)
-find_package(Boost QUIET)
+find_package(Boost REQUIRED COMPONENTS headers)
 
 if(Boost_FOUND)
     message(STATUS "Boost found: ${Boost_VERSION}")
 else()
-    message(FATAL_ERROR "Boost headers were not found. Install libboost-all-dev on Ubuntu/Debian or use a Boost installation via vcpkg on Windows.")
+    message(FATAL_ERROR "Boost headers were not found. Install libboost-all-dev on Ubuntu/Debian, or set VCPKG_ROOT and use a Boost installation from vcpkg on Windows.")
 endif()
 
 include(FetchContent)
@@ -83,6 +83,7 @@ function(fetch_or_find_dependency dependency_name package_name repo_url tag)
     elseif(${dependency_name} STREQUAL "portaudio")
         set(PA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         set(PA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(PA_USE_ASIO OFF CACHE BOOL "" FORCE)
     endif()
 
     FetchContent_MakeAvailable(${dependency_name})

@@ -4,8 +4,39 @@
 
 ### Windows (Visual Studio / MSVC)
 
+There are two ways to provide Boost for the Windows build.
+
+Option 1: use vcpkg.
+
 ```powershell
+$env:VCPKG_ROOT = 'C:\path\to\vcpkg'
 cmake --preset windows-msvc
+cmake --build --preset windows-msvc-debug
+```
+
+If vcpkg is not integrated yet:
+
+```powershell
+& "C:\path\to\vcpkg\vcpkg.exe" integrate install
+& "C:\path\to\vcpkg\vcpkg.exe" install boost-headers portaudio
+```
+
+The project uses FetchContent for Opus when it is not installed system-wide, so installing Opus via vcpkg is optional. If you prefer to manage all dependencies through vcpkg, you may also install `opus`.
+
+Option 2: use a manually installed Boost package and point CMake to it.
+
+```powershell
+$env:BOOST_ROOT = 'C:\local\boost_1_91_0'
+$env:Boost_INCLUDE_DIR = 'C:\local\boost_1_91_0\include'
+$env:Boost_LIBRARY_DIR = 'C:\local\boost_1_91_0\lib64-msvc-14.4'
+cmake --preset windows-msvc
+cmake --build --preset windows-msvc-debug
+```
+
+If you prefer not to set environment variables, pass paths directly to CMake:
+
+```powershell
+cmake --preset windows-msvc -DBoost_INCLUDE_DIR="C:\local\boost_1_91_0\include" -DBoost_LIBRARY_DIR="C:\local\boost_1_91_0\lib64-msvc-14.4"
 cmake --build --preset windows-msvc-debug
 ```
 
