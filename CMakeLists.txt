@@ -8,6 +8,10 @@ endif()
 
 project(course_project_II LANGUAGES C CXX)
 
+if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+    set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "Minimum CMake policy version to use for third-party projects" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
