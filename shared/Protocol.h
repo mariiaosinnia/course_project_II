@@ -102,7 +102,7 @@ struct UserInfo {
 // [ room_id: 2 ][ track_id: 1 ][ track_position_ms: 4 ][ user_count: 1 ][ UserInfo × user_count ]
 struct RoomJoinedHeader {
     uint16_t room_id;
-    uint8_t udp_port;
+    uint16_t udp_port;
     uint16_t track_id;
     uint32_t track_position_ms;
     uint8_t user_count;

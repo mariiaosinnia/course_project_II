@@ -14,6 +14,7 @@
 // конкретні дії (on_connected, on_room_created, ...) замість одного
 // великого switch у main(). Кожен тип пакета - окремий, тестований
 // метод, що полегшує підтримку, коли протокол розростається.
+
 class ClientApp : public std::enable_shared_from_this<ClientApp> {
 public:
     static std::shared_ptr<ClientApp> create(boost::asio::io_context& io_context);
@@ -54,7 +55,11 @@ private:
     void on_pong();
     void on_error(const std::vector<uint8_t>& body);
     void on_unhandled(PacketType type);
+    void start_udp(uint16_t udp_port);
 
     std::shared_ptr<TCPClient> tcp_client_;
+    std::string server_host_;
+    std::shared_ptr<class UdpClient> udp_client_;
     ClientState state_;
+    boost::asio::io_context& io_context_;
 };

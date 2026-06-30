@@ -79,6 +79,7 @@ std::optional<PacketParser::RoomJoinedResult> PacketParser::parse_room_joined(
     RoomJoinedResult result;
     std::memcpy(&result.header, body.data(), sizeof(RoomJoinedHeader));
     result.header.room_id = boost::endian::big_to_native(result.header.room_id);
+    result.header.udp_port = boost::endian::big_to_native(result.header.udp_port);
     result.header.track_id = boost::endian::big_to_native(result.header.track_id);
     result.header.track_position_ms = boost::endian::big_to_native(result.header.track_position_ms);
 

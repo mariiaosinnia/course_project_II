@@ -11,6 +11,8 @@ add_executable(client
 target_include_directories(client PRIVATE
     ${Boost_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/shared
+    $<TARGET_PROPERTY:${OPUS_TARGET},INTERFACE_INCLUDE_DIRECTORIES>
+    $<TARGET_PROPERTY:${PORTAUDIO_TARGET},INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 target_link_libraries(client PRIVATE
