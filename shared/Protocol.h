@@ -11,6 +11,11 @@ constexpr size_t MESSAGE_MAX_LEN = 64;
 constexpr size_t UDP_SERVER_PORT = 12346;
 constexpr size_t TCP_SERVER_PORT = 12345;
 
+constexpr int FRAME_DURATION_MS = 20;
+constexpr int TARGET_RATE = 48000;
+constexpr int MAX_OPUS_PACKET_SIZE = 4000;
+static constexpr int BITRATE = 64000;
+
 enum class PacketType : uint8_t {
     // client → server
     Connect = 0x01,
@@ -97,7 +102,7 @@ struct UserInfo {
 // [ room_id: 2 ][ track_id: 1 ][ track_position_ms: 4 ][ user_count: 1 ][ UserInfo × user_count ]
 struct RoomJoinedHeader {
     uint16_t room_id;
-    uint8_t udp_port;
+    uint16_t udp_port;
     uint16_t track_id;
     uint32_t track_position_ms;
     uint8_t user_count;

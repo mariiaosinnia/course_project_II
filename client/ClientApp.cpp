@@ -5,9 +5,7 @@
 #include "Logger.h"
 #include "PacketBuilder.h"
 #include "PacketParser.h"
-#include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/screen.hpp>
-
+#include "UDPClient.h"
 
 std::shared_ptr<ClientApp> ClientApp::create(boost::asio::io_context& io_context)
 {
@@ -32,13 +30,15 @@ std::shared_ptr<ClientApp> ClientApp::create(boost::asio::io_context& io_context
 }
 
 ClientApp::ClientApp(boost::asio::io_context& io_context)
-    : tcp_client_(TCPClient::create(io_context))
+    : io_context_(io_context)
+    , tcp_client_(TCPClient::create(io_context))
 {
 }
 
 void ClientApp::connect(const std::string& host, uint16_t port,
                          std::function<void(bool)> on_connected)
 {
+    server_host_ = host;
     tcp_client_->connect(host, port, std::move(on_connected));
 }
 
@@ -137,6 +137,34 @@ void ClientApp::on_room_joined(const std::vector<uint8_t>& body)
         msg += "\n  id=" + std::to_string(user.client_id) + " name=" + user.username;
     }
     Logger::print(msg);
+
+    start_udp(parsed->header.udp_port);
+}
+
+// ClientApp.cpp — метод start_udp
+void ClientApp::start_udp(uint16_t udp_port)
+{
+    if (state_.client_id == 0) {
+        Logger::print("cannot start UDP: client_id unknown");
+        return;
+    }
+
+    if (udp_client_) {
+        udp_client_->stop();
+        udp_client_.reset();
+    }
+
+    udp_client_ = std::make_shared<UdpClient>(
+        io_context_,
+        server_host_,
+        udp_port,
+        state_.client_id.load()
+    );
+
+    if (!udp_client_->start()) {
+        Logger::print("Failed to start UDP client");
+        udp_client_.reset();
+    }
 }
 
 void ClientApp::on_room_left()

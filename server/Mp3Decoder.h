@@ -6,5 +6,5 @@
 class Mp3Decoder {
 public:
     Mp3Decoder() = default;
-    std::shared_ptr<Track> decode(const std::string& file_path) const;
+    void decode(Track& track) const;
 };

@@ -13,31 +13,44 @@ uint16_t RoomManager::create_room(const std::string& name){
     Room room;
     room.id = room_id;
     room.name = name;
+    room.track_ids.push_back(1);
 
     rooms.emplace(room_id, std::move(room));
 
     return room_id;
 }
 
+void RoomManager::set_on_first_user_joined(OnFirstUserJoined fn) {
+    on_first_user_joined_ = std::move(fn);
+}
+
 StatusCode RoomManager::join_room(User& user, uint16_t room_id){
-    std::unique_lock<std::shared_mutex> lock(mutex);
+    bool first_user = false;
+    {
+        std::unique_lock lock(mutex);
 
-    auto room_it = rooms.find(room_id);
-    if (room_it == rooms.end()) {
-        return StatusCode::RoomNotFound;
+        auto room_it = rooms.find(room_id);
+        if (room_it == rooms.end()) {
+            return StatusCode::RoomNotFound;
+        }
+
+        if (user.room_id != 0) {
+            return StatusCode::AlreadyInRoom;
+        }
+
+        Room& room = room_it->second;
+        if (room.is_full()) {
+            return StatusCode::RoomFull;
+        }
+
+        room.user_ids.insert(user.id);
+        user.room_id = room_id;
+        first_user = (room.user_ids.size() == 1);
     }
 
-    if (user.room_id != 0) {
-        return StatusCode::AlreadyInRoom;
+    if (first_user && on_first_user_joined_) {
+        on_first_user_joined_(room_id);
     }
-
-    Room& room = room_it->second;
-    if (room.is_full()) {
-        return StatusCode::RoomFull;
-    }
-
-    room.user_ids.insert(user.id);
-    user.room_id = room_id;
 
     return StatusCode::Success;
 }
@@ -99,6 +112,7 @@ void RoomManager::set_broadcast(BroadcastFn fn){
 }
 
 void RoomManager::broadcast_to_room(uint16_t room_id, const std::vector<uint8_t>& packet, const User& excluded_user){
+    std::shared_lock lock(mutex);
     auto room_it = rooms.find(room_id);
 
     if (room_it == rooms.end()) {
@@ -152,4 +166,52 @@ void RoomManager::registerUdpEndpoint(uint32_t client_id, const udp::endpoint& e
     }
 
     user->udp_endpoint = endpoint;
+}
+
+std::vector<uint16_t> RoomManager::get_active_room_ids() const {
+    std::shared_lock lock(mutex);
+    std::vector<uint16_t> ids;
+    for (const auto& [id, room] : rooms) {
+        ids.push_back(id);
+    }
+    return ids;
+}
+
+void RoomManager::start_playback(uint16_t room_id, std::chrono::steady_clock::time_point start_time) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        it->second.track_started_at = start_time;
+        it->second.is_playing = true;
+    }
+}
+
+uint16_t RoomManager::get_current_track_id(uint16_t room_id) const {
+    std::shared_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        return it->second.current_track_id();
+    }
+    return 0;
+}
+
+uint16_t RoomManager::advance_track(uint16_t room_id, std::chrono::steady_clock::time_point start_time) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        uint16_t next_id = it->second.next_track();
+        it->second.track_started_at = start_time;
+        return next_id;
+    }
+    return 0;
+}
+
+size_t RoomManager::get_user_count(uint16_t room_id) const {
+    std::shared_lock<std::shared_mutex> lock(mutex);
+
+    auto it = rooms.find(room_id);
+    if (it != rooms.end()) {
+        return it->second.user_ids.size();
+    }
+    return 0;
 }
