@@ -3,6 +3,8 @@
 #include <memory>
 #include <unordered_map>
 #include <mutex>
+#include <thread>
+
 #include "Protocol.h"
 #include "Track.h"
 #include "Mp3Decoder.h"
