@@ -5,6 +5,9 @@
 #include "Logger.h"
 #include "PacketBuilder.h"
 #include "PacketParser.h"
+#include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/screen.hpp>
+
 
 std::shared_ptr<ClientApp> ClientApp::create(boost::asio::io_context& io_context)
 {

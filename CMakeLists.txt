@@ -105,6 +105,18 @@ if(TARGET PkgConfig::PORTAUDIO)
     set(PORTAUDIO_TARGET PkgConfig::PORTAUDIO)
 endif()
 
+# FTXUI — terminal UI, used by client
+if(NOT TARGET ftxui::component)
+    set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(ftxui
+            GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
+            GIT_TAG        v5.0.0
+    )
+    FetchContent_MakeAvailable(ftxui)
+endif()
+
 # --- Targets ---
 
 add_subdirectory(server)

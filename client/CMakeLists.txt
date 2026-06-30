@@ -18,6 +18,9 @@ target_link_libraries(client PRIVATE
     ${OPUS_TARGET}
     ${PORTAUDIO_TARGET}
     Threads::Threads
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
 )
 
 if(WIN32)
