@@ -6,6 +6,7 @@ add_executable(client
     ClientApp.cpp
     Logger.cpp
     UDPClient.cpp
+    ../boost_throw_exception_compat.cpp
     AppUi.h
     AppUI.cpp
     LoginScreen.cpp
@@ -23,6 +24,8 @@ target_include_directories(client PRIVATE
 
 target_link_libraries(client PRIVATE
     Boost::headers
+    $<$<TARGET_EXISTS:Boost::throw_exception>:Boost::throw_exception>
+    $<$<TARGET_EXISTS:Boost::exception>:Boost::exception>
     ${OPUS_TARGET}
     ${PORTAUDIO_TARGET}
     Threads::Threads

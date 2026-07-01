@@ -8,6 +8,7 @@
 int main()
 {
     boost::asio::io_context io;
+    auto work_guard = boost::asio::make_work_guard(io);
     auto app = ClientApp::create(io);
 
     app->set_server_address("127.0.0.1", 12345);
@@ -19,6 +20,7 @@ int main()
     AppUI ui(*app);
     ui.run();
 
+    work_guard.reset();
     io.stop();
     if (io_thread.joinable()) {
         io_thread.join();

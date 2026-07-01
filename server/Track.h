@@ -5,6 +5,7 @@
 
 struct Track {
     uint16_t id;
+    std::string name;
     std::string path;
     int channels;
     int sample_rate;

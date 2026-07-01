@@ -14,6 +14,7 @@ add_executable(server
     AudioEncoder.cpp
     MusicStreamer.cpp
     UdpSocket.cpp
+    ../boost_throw_exception_compat.cpp
 )
 
 target_include_directories(server PRIVATE

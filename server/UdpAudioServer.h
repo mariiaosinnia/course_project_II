@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <thread>
+#include <filesystem>
 
 #include "Protocol.h"
 #include "Track.h"
@@ -23,7 +24,8 @@ struct PlaybackRoom {
 
 class UdpAudioServer {
 public:
-    explicit UdpAudioServer(unsigned short udp_port, RoomManager& room_manager);
+    UdpAudioServer(unsigned short udp_port, RoomManager& room_manager,
+                   std::filesystem::path resource_dir);
 
     void prepareTrack(int track_id);
 
@@ -53,6 +55,7 @@ private:
     std::unordered_map<uint16_t, PlaybackRoom> active_rooms_;
     std::mutex active_rooms_mutex_;
 
+    std::filesystem::path resource_dir_;
     std::atomic<bool> running {true};
     std::thread scheduler_thread_;
 };

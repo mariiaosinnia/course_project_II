@@ -22,7 +22,9 @@ option(USE_FETCHCONTENT_DEPS "Download dependencies with FetchContent when syste
 find_package(Threads REQUIRED)
 
 set(Boost_NO_BOOST_CMAKE ON)
-find_package(Boost QUIET COMPONENTS headers)
+find_package(Boost QUIET)
+find_package(boost_throw_exception QUIET CONFIG)
+find_package(boost_exception QUIET CONFIG)
 
 if(NOT Boost_FOUND)
     find_path(Boost_INCLUDE_DIR
@@ -57,6 +59,11 @@ endif()
 
 if(Boost_FOUND)
     message(STATUS "Boost found: ${Boost_VERSION}")
+endif()
+
+if(MSVC)
+    add_compile_options(/EHsc)
+    add_compile_definitions(BOOST_NO_EXCEPTIONS=0)
 endif()
 
 include(FetchContent)

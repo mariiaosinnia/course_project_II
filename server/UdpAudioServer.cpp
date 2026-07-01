@@ -6,9 +6,11 @@
 
 
 
-UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manager)
+UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manager,
+                                   std::filesystem::path resource_dir)
     : room_manager_(room_manager),
-      udp_socket_(udp_port)
+      udp_socket_(udp_port),
+      resource_dir_(std::move(resource_dir))
 {
     loadDefaultTracks();
 }
@@ -19,7 +21,8 @@ void UdpAudioServer::loadDefaultTracks() {
     auto track = std::make_shared<Track>();
     uint16_t id = next_track_id_++;  // = 1
     track->id = id;
-    track->path = "summer.mp3";
+    track->name = "summer.mp3";
+    track->path = (resource_dir_ / "summer.mp3").string();
     tracks_[id] = track;
 
     prepareTrack(id);

@@ -1,10 +1,12 @@
 #include "Server.h"
+#include <filesystem>
 #include <iostream>
 
 Server::Server()
     : room_manager(user_manager)
     , tcp_server(io_context, room_manager, user_manager)
-    , udp_server(UDP_SERVER_PORT, room_manager)
+    , udp_server(UDP_SERVER_PORT, room_manager,
+                 std::filesystem::path(__FILE__).parent_path().parent_path())
 {
     room_manager.set_on_first_user_joined([this](uint16_t room_id) {
         udp_server.startStreaming(room_id);
