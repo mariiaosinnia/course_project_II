@@ -34,6 +34,12 @@ void LobbyScreen::set_rooms(std::vector<RoomEntry> rooms)
     screen_.PostEvent(Event::Custom);
 }
 
+void LobbyScreen::set_username(const std::string& username)
+{
+    username_ = username;
+    screen_.PostEvent(Event::Custom);
+}
+
 void LobbyScreen::set_status(const std::string& msg, bool is_error)
 {
     status_ = msg;
@@ -66,7 +72,7 @@ void LobbyScreen::build()
         Elements room_elements;
         if (rooms_copy.empty()) {
             room_elements.push_back(
-                text("  no rooms yet") | color(Color::GrayDark) | italic
+                text("  no rooms yet") | color(Color::GrayDark)
             );
         } else {
             for (size_t i = 0; i < rooms_copy.size(); ++i) {

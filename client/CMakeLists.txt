@@ -6,6 +6,12 @@ add_executable(client
     ClientApp.cpp
     Logger.cpp
     UDPClient.cpp
+    AppUi.h
+    AppUI.cpp
+    LoginScreen.cpp
+    LobbyScreen.cpp
+    RoomScreen.cpp
+    ClientState.h
 )
 
 target_include_directories(client PRIVATE

@@ -20,12 +20,43 @@ option(BUILD_TESTING "Build tests" OFF)
 option(USE_FETCHCONTENT_DEPS "Download dependencies with FetchContent when system packages are unavailable" ON)
 
 find_package(Threads REQUIRED)
-find_package(Boost REQUIRED COMPONENTS headers)
+
+set(Boost_NO_BOOST_CMAKE ON)
+find_package(Boost QUIET COMPONENTS headers)
+
+if(NOT Boost_FOUND)
+    find_path(Boost_INCLUDE_DIR
+        NAMES boost/version.hpp
+        HINTS
+            "$ENV{BOOST_ROOT}"
+            "$ENV{Boost_INCLUDE_DIR}"
+            "$ENV{BOOST_INCLUDEDIR}"
+            "$ENV{VCPKG_ROOT}/installed/x64-windows"
+            "$ENV{VCPKG_ROOT}/installed/x64-windows/include"
+            "D:/vcpkg/installed/x64-windows"
+            "D:/vcpkg/installed/x64-windows/include"
+            "C:/vcpkg/installed/x64-windows"
+            "C:/vcpkg/installed/x64-windows/include"
+        PATH_SUFFIXES include
+    )
+
+    if(Boost_INCLUDE_DIR)
+        set(Boost_INCLUDE_DIRS "${Boost_INCLUDE_DIR}")
+        set(Boost_FOUND TRUE)
+        set(Boost_VERSION "1.91.0")
+        if(NOT TARGET Boost::headers)
+            add_library(Boost::headers INTERFACE IMPORTED)
+            set_target_properties(Boost::headers PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+        endif()
+        message(STATUS "Using manually located Boost headers: ${Boost_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR "Boost headers were not found. Install Boost or point BOOST_ROOT/Boost_INCLUDE_DIR/VCPKG_ROOT to a valid installation.")
+    endif()
+endif()
 
 if(Boost_FOUND)
     message(STATUS "Boost found: ${Boost_VERSION}")
-else()
-    message(FATAL_ERROR "Boost headers were not found. Install libboost-all-dev on Ubuntu/Debian, or set VCPKG_ROOT and use a Boost installation from vcpkg on Windows.")
 endif()
 
 include(FetchContent)

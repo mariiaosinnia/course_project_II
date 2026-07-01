@@ -45,6 +45,7 @@ public:
 
     // Потокобезпечно оновити список кімнат
     void set_rooms(std::vector<RoomEntry> rooms);
+    void set_username(const std::string& username);
     void set_status(const std::string& msg, bool is_error = false);
 
 private:

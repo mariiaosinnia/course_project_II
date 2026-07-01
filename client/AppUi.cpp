@@ -78,17 +78,25 @@ AppUI::AppUI(ClientApp& app)
         app_.send_list_rooms();
     });
 
-    app_.set_on_room_joined([this](uint16_t /*room_id*/) {
+    app_.set_on_room_joined([this](uint16_t room_id) {
+        room_->set_room_name("room #" + std::to_string(room_id));
+        room_->set_track_name("track #" + std::to_string(room_id));
         navigate_to(Screen::Room);
     });
 
+    app_.set_on_room_left([this] {
+        room_->set_users({});
+        navigate_to(Screen::Lobby);
+    });
+
     app_.set_on_room_list_updated([this] {
-        // Список оновлено — передаємо в LobbyScreen
-        // (дані вже в ClientApp::state через room_list_cache)
-        const auto& rooms = app_.state().room_list_cache;
+        auto& state = app_.state();
         std::vector<RoomEntry> entries;
-        for (const auto& r : rooms) {
-            entries.push_back({r.room_id, r.name, r.user_count, ""});
+        {
+            std::lock_guard<std::mutex> lock(state.room_list_mutex);
+            for (const auto& r : state.room_list_cache) {
+                entries.push_back({r.room_id, r.name, r.user_count, ""});
+            }
         }
         lobby_->set_rooms(std::move(entries));
     });

@@ -42,7 +42,6 @@ void ClientApp::connect(const std::string& host, uint16_t port,
     tcp_client_->connect(host, port, std::move(on_connected));
 }
 
-// ---------- Команди (CLI -> мережа) ----------
 
 void ClientApp::send_connect(const std::string& username)
 {
@@ -95,6 +94,7 @@ void ClientApp::on_disconnect()
 {
     state_.connected = false;
     Logger::print("Disconnected from server");
+    if (on_disconnected_cb_) on_disconnected_cb_();
 }
 
 
@@ -108,6 +108,8 @@ void ClientApp::on_connected(const std::vector<uint8_t>& body)
     state_.client_id = parsed->client_id;
     state_.connected = true;
     Logger::print("Connected, client_id=" + std::to_string(parsed->client_id));
+
+    if (on_connected_cb_) on_connected_cb_(parsed->client_id);
 }
 
 void ClientApp::on_room_created(const std::vector<uint8_t>& body)
@@ -119,6 +121,8 @@ void ClientApp::on_room_created(const std::vector<uint8_t>& body)
     }
     Logger::print("RoomCreated, room_id=" + std::to_string(parsed->room_id) +
                    " (use /join " + std::to_string(parsed->room_id) + " to enter)");
+
+    if (on_room_created_cb_) on_room_created_cb_(parsed->room_id);
 }
 
 void ClientApp::on_room_joined(const std::vector<uint8_t>& body)
@@ -139,9 +143,16 @@ void ClientApp::on_room_joined(const std::vector<uint8_t>& body)
     Logger::print(msg);
 
     start_udp(parsed->header.udp_port);
+
+    for (const auto& user : parsed->users) {
+        if (on_user_joined_cb_) {
+            on_user_joined_cb_(user.client_id, std::string(user.username));
+        }
+    }
+
+    if (on_room_joined_cb_) on_room_joined_cb_(parsed->header.room_id);
 }
 
-// ClientApp.cpp — метод start_udp
 void ClientApp::start_udp(uint16_t udp_port)
 {
     if (state_.client_id == 0) {
@@ -171,6 +182,7 @@ void ClientApp::on_room_left()
 {
     state_.current_room_id = 0;
     Logger::print("RoomLeft");
+    if (on_room_left_cb_) on_room_left_cb_();
 }
 
 void ClientApp::on_room_list(const std::vector<uint8_t>& body)
@@ -187,6 +199,17 @@ void ClientApp::on_room_list(const std::vector<uint8_t>& body)
                " users=" + std::to_string(room.user_count);
     }
     Logger::print(msg);
+
+    {
+        std::lock_guard<std::mutex> lock(state_.room_list_mutex);
+        state_.room_list_cache.clear();
+        state_.room_list_cache.reserve(parsed->rooms.size());
+        for (const auto& room : parsed->rooms) {
+            state_.room_list_cache.push_back(room);
+        }
+    }
+
+    if (on_room_list_updated_cb_) on_room_list_updated_cb_();
 }
 
 void ClientApp::on_user_joined(const std::vector<uint8_t>& body)
@@ -233,3 +256,13 @@ void ClientApp::on_unhandled(PacketType type)
     oss << "Unhandled packet type: 0x" << std::hex << static_cast<int>(type);
     Logger::print(oss.str());
 }
+void ClientApp::set_server_address(const std::string& host, uint16_t port)
+{
+    server_host_ = host;
+    server_port_ = port;
+    }
+
+void ClientApp::connect_to_server(std::function<void(bool)> on_connected)
+{
+    connect(server_host_, server_port_, std::move(on_connected));
+    }
