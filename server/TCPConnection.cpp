@@ -30,6 +30,7 @@ void TCPConnection::start(uint32_t id, User* user) {
 }
 
 void TCPConnection::on_disconnect() {
+    executor.cleanup();
     if (disconnect_callback) {
         disconnect_callback(client_id);
     }
@@ -66,7 +67,9 @@ void TCPConnection::read_body(uint16_t size) {
 void TCPConnection::process_packet() {
     PacketType type = static_cast<PacketType>(header.type);
     auto response = executor.execute(*user_, type, body);
-    send(response);
+    if (!response.empty()) {
+        send(response);
+    }
 }
 
 void TCPConnection::send(std::vector<uint8_t> data) {
