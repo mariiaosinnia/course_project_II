@@ -13,7 +13,6 @@ uint16_t RoomManager::create_room(const std::string& name){
     Room room;
     room.id = room_id;
     room.name = name;
-    room.track_ids.push_back(1);
 
     rooms.emplace(room_id, std::move(room));
 
@@ -46,6 +45,15 @@ uint16_t RoomManager::add_track_to_room(uint16_t room_id, const std::string& tra
     }
 
     room_it->second.track_ids.push_back(track_id);
+
+    bool first_track = (room_it->second.track_ids.size() == 1);
+    bool has_users = !room_it->second.user_ids.empty();
+    bool should_start_streaming = first_track && has_users;
+
+    if (should_start_streaming && on_first_user_joined_) {
+        on_first_user_joined_(room_id);
+    }
+
     return track_id;
 }
 
