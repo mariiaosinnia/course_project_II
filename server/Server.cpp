@@ -13,7 +13,7 @@ Server::Server()
     });
 
     room_manager.set_on_track_added([this](const std::string& track_path) {
-        //return udp_server.addTrack(track_path);
+        return udp_server.addTrack(track_path);
     });
 }
 

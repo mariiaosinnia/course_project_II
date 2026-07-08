@@ -6,57 +6,54 @@
 
 
 
-UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manager,
-                                   std::filesystem::path resource_dir)
+UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manager)
     : room_manager_(room_manager),
-      udp_socket_(udp_port),
-      resource_dir_(std::move(resource_dir))
+      udp_socket_(udp_port)
 {
     loadDefaultTracks();
 }
 
-void UdpAudioServer::loadDefaultTracks() {
+uint16_t UdpAudioServer::addTrack(const std::string& file_path) {
+    auto track = prepareTrack(file_path);
+    if (!track) return 0;
+
     std::lock_guard<std::mutex> lock(tracks_mutex_);
-
-    auto track = std::make_shared<Track>();
-    uint16_t id = next_track_id_++;  // = 1
+    uint16_t id = next_track_id_++;
     track->id = id;
-    track->name = "summer.mp3";
-    track->path = (resource_dir_ / "summer.mp3").string();
     tracks_[id] = track;
-
-    prepareTrack(id);
+    return id;
 }
 
-void UdpAudioServer::prepareTrack(int track_id) {
-    auto track = tracks_[track_id];
+std::shared_ptr<Track> UdpAudioServer::prepareTrack(const std::string& file_path) {
+    auto track = std::make_shared<Track>();
+    track->path = file_path;
+
     decoder_.decode(*track);
 
-    if (!AudioEncoder::isSupportedRate(tracks_[track_id]->sample_rate)) {
-        resampler_.resample(tracks_[track_id], TARGET_RATE);
+    if (!AudioEncoder::isSupportedRate(track->sample_rate)) {
+        resampler_.resample(track, TARGET_RATE);
     }
+
     AudioEncoder encoder(track->sample_rate, track->channels);
     int samples_per_frame = (track->sample_rate * FRAME_DURATION_MS) / 1000;
-
     size_t total_samples = track->pcm_data.size() / track->channels;
     size_t total_frames = total_samples / samples_per_frame;
 
     track->opus_packets.reserve(total_frames);
-
     for (size_t i = 0; i < total_frames; ++i) {
-        const int16_t* frame_start = track->pcm_data.data() + (i * samples_per_frame * track->channels);
-        auto opus_data = encoder.encodeFrame(frame_start, samples_per_frame);
-        track->opus_packets.push_back(std::move(opus_data));
+        const int16_t* frame_start = track->pcm_data.data() +
+                                      (i * samples_per_frame * track->channels);
+        track->opus_packets.push_back(encoder.encodeFrame(frame_start, samples_per_frame));
     }
 
     track->pcm_data.clear();
     track->pcm_data.shrink_to_fit();
 
-    std::cout << "Track loaded: " << tracks_[track_id]->path
-              << " | id=" << track_id
-              << " | rate=" << tracks_[track_id]->sample_rate
-              << " | channels=" << tracks_[track_id]->channels << "\n";
+    std::cout << "Track loaded: " << file_path
+              << " | rate=" << track->sample_rate
+              << " | channels=" << track->channels << "\n";
 
+    return track;
 }
 
 struct RoomStreamState {

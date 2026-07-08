@@ -27,7 +27,7 @@ public:
     UdpAudioServer(unsigned short udp_port, RoomManager& room_manager,
                    std::filesystem::path resource_dir);
 
-    void prepareTrack(int track_id);
+    uint16_t addTrack(const std::string& file_path);
 
     void startStreaming(uint16_t room_id);
 
@@ -42,6 +42,7 @@ private:
     void receiveLoop();
     void schedulerLoop();
     void loadDefaultTracks();
+    std::shared_ptr<Track> prepareTrack(const std::string& file_path);
 
     RoomManager&    room_manager_;
     UdpSocket       udp_socket_;
