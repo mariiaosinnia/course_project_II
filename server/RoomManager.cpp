@@ -51,6 +51,8 @@ uint16_t RoomManager::add_track_to_room(uint16_t room_id, const std::string& tra
 
 StatusCode RoomManager::join_room(User& user, uint16_t room_id){
     bool first_user = false;
+    bool has_track = false;
+    bool should_start_streaming = false;
     {
         std::unique_lock lock(mutex);
 
@@ -71,9 +73,11 @@ StatusCode RoomManager::join_room(User& user, uint16_t room_id){
         room.user_ids.insert(user.id);
         user.room_id = room_id;
         first_user = (room.user_ids.size() == 1);
+        has_track = !room.track_ids.empty();
+        should_start_streaming = first_user && has_track;
     }
 
-    if (first_user && on_first_user_joined_) {
+    if (should_start_streaming && on_first_user_joined_) {
         on_first_user_joined_(room_id);
     }
 
