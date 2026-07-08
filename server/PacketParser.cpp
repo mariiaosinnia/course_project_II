@@ -41,3 +41,18 @@ std::optional<CreateRoomBody> PacketParser::parse_create_room(const std::vector<
 	return result;
 }
 
+std::optional<UploadTrackBeginBody> PacketParser::parse_upload_begin(const std::vector<uint8_t>& body)
+{
+	if (body.size() < sizeof(UploadTrackBeginBody)) {
+		return std::nullopt;
+	}
+
+	UploadTrackBeginBody result;
+	std::memcpy(&result, body.data(), sizeof(result));
+	result.room_id = boost::endian::big_to_native(result.room_id);
+	result.file_size = boost::endian::big_to_native(result.file_size);
+	result.filename[sizeof(result.filename) - 1] = '\0';
+
+	return result;
+}
+

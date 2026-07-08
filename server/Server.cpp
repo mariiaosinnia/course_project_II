@@ -11,6 +11,10 @@ Server::Server()
     room_manager.set_on_first_user_joined([this](uint16_t room_id) {
         udp_server.startStreaming(room_id);
     });
+
+    room_manager.set_on_track_added([this](const std::string& track_path) {
+        //return udp_server.addTrack(track_path);
+    });
 }
 
 void Server::run() {

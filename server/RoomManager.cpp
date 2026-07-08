@@ -24,6 +24,31 @@ void RoomManager::set_on_first_user_joined(OnFirstUserJoined fn) {
     on_first_user_joined_ = std::move(fn);
 }
 
+void RoomManager::set_on_track_added(TrackAddedFn fn) {
+    on_track_added_ = std::move(fn);
+}
+
+uint16_t RoomManager::add_track_to_room(uint16_t room_id, const std::string& track_path) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+
+    auto room_it = rooms.find(room_id);
+    if (room_it == rooms.end() || track_path.empty()) {
+        return 0;
+    }
+
+    uint16_t track_id = 0;
+    if (on_track_added_) {
+        track_id = on_track_added_(track_path);
+    }
+
+    if (track_id == 0) {
+        return 0;
+    }
+
+    room_it->second.track_ids.push_back(track_id);
+    return track_id;
+}
+
 StatusCode RoomManager::join_room(User& user, uint16_t room_id){
     bool first_user = false;
     {

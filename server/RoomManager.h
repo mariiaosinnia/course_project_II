@@ -59,6 +59,7 @@ public:
     std::vector<RoomListEntry> list_rooms() const;
     std::vector<UserInfo> get_users_in_room(uint16_t room_id) const;
     size_t get_user_count(uint16_t room_id) const;
+    uint16_t add_track_to_room(uint16_t room_id, const std::string& track_path);
 
     using BroadcastFn = std::function<void(uint32_t, std::vector<uint8_t>)>;
     void set_broadcast(BroadcastFn fn);
@@ -77,6 +78,9 @@ public:
     using OnFirstUserJoined = std::function<void(uint16_t)>;
     void set_on_first_user_joined(OnFirstUserJoined fn);
 
+    using TrackAddedFn = std::function<uint16_t(const std::string&)>;
+    void set_on_track_added(TrackAddedFn fn);
+
 private:
     mutable std::shared_mutex mutex;
     std::unordered_map<uint16_t, Room> rooms;
@@ -84,4 +88,5 @@ private:
     BroadcastFn broadcast_fn;
     UserManager& user_manager;
     OnFirstUserJoined on_first_user_joined_;
+    TrackAddedFn on_track_added_;
 };

@@ -67,6 +67,15 @@ std::vector<uint8_t> PacketBuilder::room_list(const std::vector<RoomListEntry>& 
     return packet;
 }
 
+std::vector<uint8_t> PacketBuilder::track_added(uint16_t room_id, uint16_t track_id, const char* filename) {
+    TrackAddedBody body;
+    body.room_id = boost::endian::native_to_big(room_id);
+    body.track_id = boost::endian::native_to_big(track_id);
+    std::strncpy(body.filename, filename, FILENAME_MAX_LEN - 1);
+    body.filename[FILENAME_MAX_LEN - 1] = '\0';
+    return build(PacketType::TrackAdded, body);
+}
+
 std::vector<uint8_t> PacketBuilder::room_joined(const RoomJoinedHeader& rj_header,
     const std::vector<UserInfo>& users) {
     size_t payload_size = sizeof(RoomJoinedHeader) + users.size() * sizeof(UserInfo);

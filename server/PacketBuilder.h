@@ -17,6 +17,7 @@ public:
     static std::vector<uint8_t> room_list(const std::vector<RoomListEntry>& rooms);
     static std::vector<uint8_t> room_joined(const RoomJoinedHeader& header,
         const std::vector<UserInfo>& users);
+    static std::vector<uint8_t> track_added(uint16_t room_id, uint16_t track_id, const char* filename);
 private:
     static std::vector<uint8_t> build(PacketType type);
     template<typename T>

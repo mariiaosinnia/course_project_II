@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -7,6 +7,8 @@
 constexpr size_t USERNAME_MAX_LEN = 32;
 constexpr size_t ROOM_NAME_MAX_LEN = 32;
 constexpr size_t MESSAGE_MAX_LEN = 64;
+constexpr size_t FILENAME_MAX_LEN = 128;
+constexpr uint32_t MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
 constexpr size_t UDP_SERVER_PORT = 12346;
 constexpr size_t TCP_SERVER_PORT = 12345;
@@ -28,6 +30,9 @@ enum class PacketType : uint8_t {
     VoiceStart = 0x08,
     VoiceStop = 0x09,
     Ping = 0x0A,
+    UploadTrackBegin = 0x0B,
+    UploadTrackData = 0x0C,
+    UploadTrackEnd = 0x0D,
 
     // server → client
     Connected = 0x10,
@@ -42,6 +47,7 @@ enum class PacketType : uint8_t {
     VoiceStarted = 0x19,
     VoiceStopped = 0x1A,
     Pong = 0x1B,
+    TrackAdded = 0x1C,
     Error = 0x1F,
 };
 
@@ -51,9 +57,11 @@ enum class StatusCode : uint8_t {
     RoomFull = 0x02,
     AlreadyInRoom = 0x03,
     NotInRoom = 0x04,
+    UploadFailed = 0x05,
+    FileTooLarge = 0x06,
+    NoUploadInProgress = 0x07,
+    UploadAlreadyInProgress = 0x08,
     Unknown = 0xFF
-    //InvalidTrack = 0x05,
-    //UsernameTaken = 0x06,
 };
 
 #pragma pack(push, 1)
@@ -76,6 +84,14 @@ struct CreateRoomBody {
 struct JoinRoomBody {
     uint16_t room_id;
 };
+
+struct UploadTrackBeginBody {
+    uint16_t room_id;
+    uint32_t file_size;
+    char filename[FILENAME_MAX_LEN];
+};
+// UploadTrackData — body is raw file bytes, no struct needed
+// UploadTrackEnd — no body
 
 //struct TrackSelectBody {
 //    uint8_t track_id;
@@ -127,6 +143,12 @@ struct UserJoinedBody {
  
 struct UserLeftBody {
     uint32_t client_id;
+};
+
+struct TrackAddedBody {
+    uint16_t room_id;
+    uint16_t track_id;
+    char filename[FILENAME_MAX_LEN];
 };
  
 //struct TrackSyncBody {
