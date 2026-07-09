@@ -13,6 +13,10 @@ struct UploadState {
     std::ofstream file_stream;
     bool completed = false;
 
+    UploadState() = default;
+    UploadState(UploadState&&) = default;
+    UploadState& operator=(UploadState&&) = default;
+
     ~UploadState() {
         if (file_stream.is_open()) {
             file_stream.close();

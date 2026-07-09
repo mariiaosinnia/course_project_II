@@ -116,7 +116,7 @@ std::vector<uint8_t> Executor::handle_upload_begin(User& user, const std::vector
         return PacketBuilder::error(StatusCode::Unknown);
     }
 
-ї    if (parsed->room_id != user.room_id) {
+    if (parsed->room_id != user.room_id) {
         return PacketBuilder::error(StatusCode::NotInRoom);
     }
 
@@ -157,7 +157,7 @@ std::vector<uint8_t> Executor::handle_upload_begin(User& user, const std::vector
         return PacketBuilder::error(StatusCode::UploadFailed);
     }
 
-    upload_state_ = std::move(state);
+    upload_state_.emplace(std::move(state));
 
     std::cout << "Upload started: user=" << user.id
               << " file=" << filename

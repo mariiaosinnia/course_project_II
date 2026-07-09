@@ -6,11 +6,15 @@
 
 
 
-UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manager)
-    : room_manager_(room_manager),
-      udp_socket_(udp_port)
+UdpAudioServer::UdpAudioServer(unsigned short udp_port, RoomManager& room_manager,
+                                std::filesystem::path resource_dir)
+    : room_manager_(room_manager)
+    , udp_socket_(udp_port)
+    , resource_dir_(std::move(resource_dir))
 {
-    loadDefaultTracks();
+    room_manager_.set_on_track_added([this](const std::string& file_path) {
+        return addTrack(file_path);
+    });
 }
 
 uint16_t UdpAudioServer::addTrack(const std::string& file_path) {
