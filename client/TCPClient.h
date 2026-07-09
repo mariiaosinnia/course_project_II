@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -31,6 +32,7 @@ private:
     void read_header();
     void read_body(uint16_t size);
     void process_packet();
+    void write_next();
     void on_disconnect();
 
     boost::asio::ip::tcp::socket socket;
@@ -41,4 +43,5 @@ private:
 
     PacketCallback packet_callback;
     DisconnectCallback disconnect_callback;
+    std::deque<std::shared_ptr<std::vector<uint8_t>>> write_queue;
 };

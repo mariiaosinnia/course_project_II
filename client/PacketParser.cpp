@@ -57,6 +57,21 @@ std::optional<UserLeftBody> PacketParser::parse_user_left(const std::vector<uint
     return result;
 }
 
+std::optional<TrackAddedBody> PacketParser::parse_track_added(const std::vector<uint8_t>& body)
+{
+    if (body.size() < sizeof(TrackAddedBody)) {
+        return std::nullopt;
+    }
+
+    TrackAddedBody result;
+    std::memcpy(&result, body.data(), sizeof(result));
+    result.room_id = boost::endian::big_to_native(result.room_id);
+    result.track_id = boost::endian::big_to_native(result.track_id);
+    result.filename[sizeof(result.filename) - 1] = '\0';
+
+    return result;
+}
+
 std::optional<ErrorBody> PacketParser::parse_error(const std::vector<uint8_t>& body)
 {
     if (body.size() < sizeof(ErrorBody)) {

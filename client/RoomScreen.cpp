@@ -22,10 +22,12 @@ static std::string fmt_time(int secs)
 RoomScreen::RoomScreen(
     ScreenInteractive& screen,
     std::function<void()> on_leave,
-    std::function<void()> on_mute_toggle)
+    std::function<void()> on_mute_toggle,
+    std::function<void(const std::string& path)> on_upload)
     : screen_(screen)
     , on_leave_(std::move(on_leave))
     , on_mute_toggle_(std::move(on_mute_toggle))
+    , on_upload_(std::move(on_upload))
 {
     build();
 }
@@ -101,6 +103,16 @@ void RoomScreen::set_pomodoro(int seconds_remaining)
     screen_.PostEvent(Event::Custom);
 }
 
+void RoomScreen::set_upload_status(const std::string& status, bool is_error)
+{
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    upload_status_ = status;
+    upload_status_is_error_ = is_error;
+    upload_busy_ = !is_error && !status.empty() &&
+        status.find("track added:") != 0;
+    screen_.PostEvent(Event::Custom);
+}
+
 // ---------- Рендер підсекцій ----------
 
 Element RoomScreen::render_now_playing() const
@@ -152,6 +164,20 @@ Element RoomScreen::render_visualizer() const
     });
 }
 
+Element RoomScreen::render_upload(const std::string& status_text, bool is_error) const
+{
+    Element status = text("  paste mp3 path and press upload") | color(Color::GrayDark);
+    if (!status_text.empty()) {
+        status = text("  " + status_text)
+            | color(is_error ? Color::Red : Color::GrayDark);
+    }
+
+    return vbox({
+        text("  upload track") | color(Color::GrayDark),
+        status,
+    });
+}
+
 Element RoomScreen::render_pomodoro() const
 {
     if (pomodoro_secs_ < 0) {
@@ -191,31 +217,50 @@ void RoomScreen::build()
         if (on_mute_toggle_) on_mute_toggle_();
     });
 
-    auto container = Container::Horizontal({btn_leave, btn_mute});
+    auto input_upload = Input(&upload_path_, "path to .mp3");
+
+    auto btn_upload = Button("upload", [this] {
+        if (upload_path_.empty()) {
+            set_upload_status("choose a file first", true);
+            return;
+        }
+        if (on_upload_) {
+            on_upload_(upload_path_);
+        }
+    });
+
+    auto container = Container::Vertical({
+        Container::Horizontal({btn_leave, btn_mute}),
+        Container::Horizontal({input_upload, btn_upload}),
+    });
 
     component_ = Renderer(container, [this, container] {
         // Знімок даних під mutex'ом
         std::string room_name, track_name;
         std::vector<UserEntry> users;
         std::vector<float> viz;
+        std::string upload_status;
         int ping_ms, pomo_secs;
         float loss;
-        bool muted;
+        bool muted, upload_status_is_error, upload_busy;
         {
             std::lock_guard<std::mutex> lock(data_mutex_);
             room_name  = room_name_;
             track_name = track_name_;
             users      = users_;
             viz        = visualizer_bars_;
+            upload_status = upload_status_;
             ping_ms    = ping_ms_;
             loss       = loss_;
             muted      = muted_;
             pomo_secs  = pomodoro_secs_;
+            upload_status_is_error = upload_status_is_error_;
+            upload_busy = upload_busy_;
         }
 
         // Header
         auto header = hbox({
-            container->ChildAt(0)->Render(),
+            container->ChildAt(0)->ChildAt(0)->Render(),
             text("  " + room_name) | bold | color(Color::Cyan),
             filler(),
             text("● live") | color(Color::Green),
@@ -227,6 +272,15 @@ void RoomScreen::build()
             render_now_playing(),
             separator() | color(Color::GrayDark),
             render_visualizer(),
+            separator() | color(Color::GrayDark),
+            render_upload(upload_status, upload_status_is_error),
+            hbox({
+                text("  "),
+                container->ChildAt(1)->ChildAt(0)->Render() | size(WIDTH, EQUAL, 36),
+                text("  "),
+                container->ChildAt(1)->ChildAt(1)->Render()
+                    | (upload_busy ? dim : nothing),
+            }),
         }) | flex;
 
         // Права колонка: юзери + помодоро

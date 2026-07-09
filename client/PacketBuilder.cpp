@@ -49,6 +49,37 @@ std::vector<uint8_t> PacketBuilder::ping()
     return build(PacketType::Ping);
 }
 
+std::vector<uint8_t> PacketBuilder::upload_track_begin(
+    uint16_t room_id,
+    uint32_t file_size,
+    const std::string& filename)
+{
+    UploadTrackBeginBody body{};
+    body.room_id = boost::endian::native_to_big(room_id);
+    body.file_size = boost::endian::native_to_big(file_size);
+    copy_fixed(body.filename, sizeof(body.filename), filename);
+    return build(PacketType::UploadTrackBegin, body);
+}
+
+std::vector<uint8_t> PacketBuilder::upload_track_data(const std::vector<uint8_t>& chunk)
+{
+    PacketHeader header;
+    header.type = static_cast<uint8_t>(PacketType::UploadTrackData);
+    header.payload_size = boost::endian::native_to_big(static_cast<uint16_t>(chunk.size()));
+
+    std::vector<uint8_t> packet(sizeof(header) + chunk.size());
+    std::memcpy(packet.data(), &header, sizeof(header));
+    if (!chunk.empty()) {
+        std::memcpy(packet.data() + sizeof(header), chunk.data(), chunk.size());
+    }
+    return packet;
+}
+
+std::vector<uint8_t> PacketBuilder::upload_track_end()
+{
+    return build(PacketType::UploadTrackEnd);
+}
+
 std::vector<uint8_t> PacketBuilder::build(PacketType type)
 {
     PacketHeader header;

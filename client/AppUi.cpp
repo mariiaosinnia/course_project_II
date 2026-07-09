@@ -54,6 +54,9 @@ AppUI::AppUI(ClientApp& app)
         },
         [this] {
             // TODO: mute/unmute через VoiceStart/VoiceStop
+        },
+        [this](const std::string& path) {
+            app_.send_upload_track(path);
         }
     );
 
@@ -107,6 +110,14 @@ AppUI::AppUI(ClientApp& app)
 
     app_.set_on_user_left([this](uint32_t id) {
         room_->remove_user(id);
+    });
+
+    app_.set_on_upload_status([this](const std::string& status, bool is_error) {
+        room_->set_upload_status(status, is_error);
+    });
+
+    app_.set_on_track_added([this](uint16_t room_id, uint16_t track_id, const std::string& filename) {
+        room_->set_track_name(filename + " (#" + std::to_string(track_id) + ")");
     });
 }
 

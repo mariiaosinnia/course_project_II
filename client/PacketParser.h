@@ -14,6 +14,7 @@ public:
     static std::optional<RoomCreatedBody> parse_room_created(const std::vector<uint8_t>& body);
     static std::optional<UserJoinedBody> parse_user_joined(const std::vector<uint8_t>& body);
     static std::optional<UserLeftBody> parse_user_left(const std::vector<uint8_t>& body);
+    static std::optional<TrackAddedBody> parse_track_added(const std::vector<uint8_t>& body);
     static std::optional<ErrorBody> parse_error(const std::vector<uint8_t>& body);
 
     struct RoomJoinedResult {

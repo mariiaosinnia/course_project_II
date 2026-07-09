@@ -19,6 +19,12 @@ public:
     static std::vector<uint8_t> leave_room();
     static std::vector<uint8_t> list_rooms();
     static std::vector<uint8_t> ping();
+    static std::vector<uint8_t> upload_track_begin(
+        uint16_t room_id,
+        uint32_t file_size,
+        const std::string& filename);
+    static std::vector<uint8_t> upload_track_data(const std::vector<uint8_t>& chunk);
+    static std::vector<uint8_t> upload_track_end();
 
 private:
     static std::vector<uint8_t> build(PacketType type);

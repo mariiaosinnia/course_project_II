@@ -8,7 +8,7 @@ add_executable(client
     UDPClient.cpp
     ../boost_throw_exception_compat.cpp
     AppUi.h
-    AppUI.cpp
+    AppUi.cpp
     LoginScreen.cpp
     LobbyScreen.cpp
     RoomScreen.cpp

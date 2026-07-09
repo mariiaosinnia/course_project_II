@@ -85,11 +85,35 @@ void TCPClient::send(std::vector<uint8_t> data)
 {
     auto buffer = std::make_shared<std::vector<uint8_t>>(std::move(data));
 
+    boost::asio::post(socket.get_executor(),
+        [self = shared_from_this(), buffer] {
+            bool write_in_progress = !self->write_queue.empty();
+            self->write_queue.push_back(buffer);
+            if (!write_in_progress) {
+                self->write_next();
+            }
+        });
+}
+
+void TCPClient::write_next()
+{
+    if (write_queue.empty()) {
+        return;
+    }
+
+    auto buffer = write_queue.front();
     boost::asio::async_write(socket,
         boost::asio::buffer(*buffer),
         [self = shared_from_this(), buffer](boost::system::error_code ec, std::size_t) {
             if (ec) {
                 std::cerr << "send error: " << ec.message() << "\n";
+                self->on_disconnect();
+                return;
+            }
+
+            self->write_queue.pop_front();
+            if (!self->write_queue.empty()) {
+                self->write_next();
             }
         });
 }

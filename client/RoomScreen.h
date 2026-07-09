@@ -37,7 +37,8 @@ public:
     explicit RoomScreen(
         ftxui::ScreenInteractive& screen,
         std::function<void()> on_leave,
-        std::function<void()> on_mute_toggle
+        std::function<void()> on_mute_toggle,
+        std::function<void(const std::string& path)> on_upload
     );
 
     ftxui::Component component();
@@ -52,11 +53,13 @@ public:
     void set_visualizer_data(std::vector<float> bars);  // 0.0–1.0 per bar
     void set_muted(bool muted);
     void set_pomodoro(int seconds_remaining);  // -1 = вимкнено
+    void set_upload_status(const std::string& status, bool is_error = false);
 
 private:
     ftxui::ScreenInteractive& screen_;
     std::function<void()> on_leave_;
     std::function<void()> on_mute_toggle_;
+    std::function<void(const std::string&)> on_upload_;
 
     mutable std::mutex data_mutex_;
 
@@ -68,6 +71,10 @@ private:
     std::vector<float> visualizer_bars_;
     bool muted_ = false;
     int pomodoro_secs_ = -1;
+    std::string upload_path_;
+    std::string upload_status_;
+    bool upload_status_is_error_ = false;
+    bool upload_busy_ = false;
 
     ftxui::Component component_;
     void build();
@@ -76,6 +83,7 @@ private:
     ftxui::Element render_now_playing() const;
     ftxui::Element render_users() const;
     ftxui::Element render_visualizer() const;
+    ftxui::Element render_upload(const std::string& status, bool is_error) const;
     ftxui::Element render_pomodoro() const;
     ftxui::Element render_footer() const;
 };

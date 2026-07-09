@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <mutex>
 #include <memory>
 #include <vector>
 #include <functional>
@@ -24,6 +25,7 @@ public:
     void send_leave_room();
     void send_list_rooms();
     void send_ping();
+    void send_upload_track(const std::string& path);
 
     ClientState& state() { return state_; }
     const ClientState& state() const { return state_; }
@@ -36,9 +38,17 @@ public:
     void set_on_room_list_updated(std::function<void()> cb) { on_room_list_updated_cb_ = std::move(cb); }
     void set_on_user_joined(std::function<void(uint32_t, const std::string&)> cb) { on_user_joined_cb_ = std::move(cb); }
     void set_on_user_left(std::function<void(uint32_t)> cb) { on_user_left_cb_ = std::move(cb); }
+    void set_on_track_added(std::function<void(uint16_t, uint16_t, const std::string&)> cb) { on_track_added_cb_ = std::move(cb); }
+    void set_on_upload_status(std::function<void(const std::string&, bool)> cb) { on_upload_status_cb_ = std::move(cb); }
 
 private:
     explicit ClientApp(boost::asio::io_context& io_context);
+
+    void set_upload_status(const std::string& status, bool is_error);
+    void finish_upload_status(const std::string& status, bool is_error);
+    void set_pending_upload_filename(const std::string& filename);
+    bool consume_pending_upload_if_matches(const std::string& filename);
+    static std::string status_to_string(StatusCode code);
 
     void on_packet(PacketType type, const std::vector<uint8_t>& body);
     void on_disconnect();
@@ -50,6 +60,7 @@ private:
     void on_room_list(const std::vector<uint8_t>& body);
     void on_user_joined(const std::vector<uint8_t>& body);
     void on_user_left(const std::vector<uint8_t>& body);
+    void on_track_added(const std::vector<uint8_t>& body);
     void on_pong();
     void on_error(const std::vector<uint8_t>& body);
     void on_unhandled(PacketType type);
@@ -61,6 +72,8 @@ private:
     std::shared_ptr<class UdpClient> udp_client_;
     ClientState state_;
     boost::asio::io_context& io_context_;
+    std::mutex upload_mutex_;
+    std::string pending_upload_filename_;
 
     std::function<void(uint32_t)> on_connected_cb_;
     std::function<void()> on_disconnected_cb_;
@@ -70,4 +83,6 @@ private:
     std::function<void()> on_room_list_updated_cb_;
     std::function<void(uint32_t, const std::string&)> on_user_joined_cb_;
     std::function<void(uint32_t)> on_user_left_cb_;
+    std::function<void(uint16_t, uint16_t, const std::string&)> on_track_added_cb_;
+    std::function<void(const std::string&, bool)> on_upload_status_cb_;
 };

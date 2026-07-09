@@ -1,6 +1,12 @@
 #include "ClientApp.h"
 
+#include <array>
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
+#include <thread>
 
 #include "Logger.h"
 #include "PacketBuilder.h"
@@ -33,6 +39,58 @@ ClientApp::ClientApp(boost::asio::io_context& io_context)
     : io_context_(io_context)
     , tcp_client_(TCPClient::create(io_context))
 {
+}
+
+namespace {
+    std::string trim_path(std::string path)
+    {
+        auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
+        path.erase(path.begin(), std::find_if(path.begin(), path.end(),
+            [&](char ch) { return !is_space(static_cast<unsigned char>(ch)); }));
+        path.erase(std::find_if(path.rbegin(), path.rend(),
+            [&](char ch) { return !is_space(static_cast<unsigned char>(ch)); }).base(), path.end());
+
+        if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
+            path = path.substr(1, path.size() - 2);
+        }
+        return path;
+    }
+}
+
+void ClientApp::set_upload_status(const std::string& status, bool is_error)
+{
+    boost::asio::post(io_context_, [this, status, is_error] {
+        if (on_upload_status_cb_) {
+            on_upload_status_cb_(status, is_error);
+        }
+    });
+}
+
+void ClientApp::finish_upload_status(const std::string& status, bool is_error)
+{
+    {
+        std::lock_guard<std::mutex> lock(upload_mutex_);
+        pending_upload_filename_.clear();
+    }
+    state_.upload_in_progress = false;
+    set_upload_status(status, is_error);
+}
+
+void ClientApp::set_pending_upload_filename(const std::string& filename)
+{
+    std::lock_guard<std::mutex> lock(upload_mutex_);
+    pending_upload_filename_ = filename;
+}
+
+bool ClientApp::consume_pending_upload_if_matches(const std::string& filename)
+{
+    std::lock_guard<std::mutex> lock(upload_mutex_);
+    if (pending_upload_filename_ != filename) {
+        return false;
+    }
+
+    pending_upload_filename_.clear();
+    return true;
 }
 
 void ClientApp::connect(const std::string& host, uint16_t port,
@@ -73,6 +131,110 @@ void ClientApp::send_ping()
     tcp_client_->send(PacketBuilder::ping());
 }
 
+void ClientApp::send_upload_track(const std::string& path)
+{
+    uint16_t room_id = state_.current_room_id.load();
+    if (room_id == 0) {
+        set_upload_status("join a room before uploading", true);
+        return;
+    }
+
+    bool expected = false;
+    if (!state_.upload_in_progress.compare_exchange_strong(expected, true)) {
+        set_upload_status("upload already in progress", true);
+        return;
+    }
+
+    auto tcp = tcp_client_;
+    std::weak_ptr<ClientApp> self = shared_from_this();
+
+    std::thread([self, tcp, room_id, path = trim_path(path)] {
+        namespace fs = std::filesystem;
+        constexpr size_t chunk_size = 60 * 1024;
+
+        auto finish = [&self](const std::string& status, bool is_error) {
+            if (auto app = self.lock()) {
+                app->finish_upload_status(status, is_error);
+            }
+        };
+        auto report = [&self](const std::string& status, bool is_error) {
+            if (auto app = self.lock()) {
+                app->set_upload_status(status, is_error);
+            }
+        };
+
+        if (path.empty()) {
+            finish("choose a file first", true);
+            return;
+        }
+
+        std::error_code ec;
+        fs::path file_path(path);
+        if (!fs::is_regular_file(file_path, ec)) {
+            finish(ec ? "cannot access file: " + ec.message() : "path is not a file", true);
+            return;
+        }
+
+        uintmax_t size = fs::file_size(file_path, ec);
+        if (ec) {
+            finish("cannot read file size: " + ec.message(), true);
+            return;
+        }
+        if (size == 0 || size > MAX_UPLOAD_SIZE) {
+            finish("file must be 1 byte to 50 MB", true);
+            return;
+        }
+
+        std::ifstream file(file_path, std::ios::binary);
+        if (!file.is_open()) {
+            finish("cannot open file", true);
+            return;
+        }
+
+        std::string filename = file_path.filename().string();
+        if (filename.empty()) {
+            finish("file name is empty", true);
+            return;
+        }
+        if (filename.size() >= FILENAME_MAX_LEN) {
+            finish("file name is too long", true);
+            return;
+        }
+
+        if (auto app = self.lock()) {
+            app->set_pending_upload_filename(filename);
+        }
+
+        report("uploading " + filename + "...", false);
+        tcp->send(PacketBuilder::upload_track_begin(
+            room_id,
+            static_cast<uint32_t>(size),
+            filename));
+
+        std::array<char, chunk_size> buffer{};
+        while (file.good()) {
+            file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+            std::streamsize read = file.gcount();
+            if (read <= 0) {
+                break;
+            }
+
+            std::vector<uint8_t> chunk(
+                reinterpret_cast<uint8_t*>(buffer.data()),
+                reinterpret_cast<uint8_t*>(buffer.data()) + read);
+            tcp->send(PacketBuilder::upload_track_data(chunk));
+        }
+
+        if (file.bad()) {
+            finish("file read failed", true);
+            return;
+        }
+
+        tcp->send(PacketBuilder::upload_track_end());
+        report("upload sent, waiting for server...", false);
+    }).detach();
+}
+
 
 void ClientApp::on_packet(PacketType type, const std::vector<uint8_t>& body)
 {
@@ -84,6 +246,7 @@ void ClientApp::on_packet(PacketType type, const std::vector<uint8_t>& body)
         case PacketType::RoomList:     on_room_list(body);    break;
         case PacketType::UserJoined:   on_user_joined(body);  break;
         case PacketType::UserLeft:     on_user_left(body);    break;
+        case PacketType::TrackAdded:   on_track_added(body);  break;
         case PacketType::Pong:         on_pong();             break;
         case PacketType::Error:        on_error(body);        break;
         default:                       on_unhandled(type);    break;
@@ -93,6 +256,12 @@ void ClientApp::on_packet(PacketType type, const std::vector<uint8_t>& body)
 void ClientApp::on_disconnect()
 {
     state_.connected = false;
+    state_.current_room_id = 0;
+    state_.upload_in_progress = false;
+    if (udp_client_) {
+        udp_client_->stop();
+        udp_client_.reset();
+    }
     Logger::print("Disconnected from server");
     if (on_disconnected_cb_) on_disconnected_cb_();
 }
@@ -133,6 +302,7 @@ void ClientApp::on_room_joined(const std::vector<uint8_t>& body)
         return;
     }
     state_.current_room_id = parsed->header.room_id;
+    state_.upload_in_progress = false;
 
     std::string msg = "RoomJoined room_id=" + std::to_string(parsed->header.room_id) +
                        " track_position_ms=" + std::to_string(parsed->header.track_position_ms) +
@@ -181,7 +351,13 @@ void ClientApp::start_udp(uint16_t udp_port)
 void ClientApp::on_room_left()
 {
     state_.current_room_id = 0;
+    state_.upload_in_progress = false;
+    if (udp_client_) {
+        udp_client_->stop();
+        udp_client_.reset();
+    }
     Logger::print("RoomLeft");
+    set_upload_status("", false);
     if (on_room_left_cb_) on_room_left_cb_();
 }
 
@@ -221,6 +397,9 @@ void ClientApp::on_user_joined(const std::vector<uint8_t>& body)
     }
     Logger::print(std::string("UserJoined: ") + parsed->username +
                    " (id=" + std::to_string(parsed->client_id) + ")");
+    if (on_user_joined_cb_) {
+        on_user_joined_cb_(parsed->client_id, std::string(parsed->username));
+    }
 }
 
 void ClientApp::on_user_left(const std::vector<uint8_t>& body)
@@ -231,6 +410,33 @@ void ClientApp::on_user_left(const std::vector<uint8_t>& body)
         return;
     }
     Logger::print("UserLeft: id=" + std::to_string(parsed->client_id));
+    if (on_user_left_cb_) {
+        on_user_left_cb_(parsed->client_id);
+    }
+}
+
+void ClientApp::on_track_added(const std::vector<uint8_t>& body)
+{
+    auto parsed = PacketParser::parse_track_added(body);
+    if (!parsed) {
+        Logger::print("bad TrackAdded body");
+        return;
+    }
+
+    std::string filename(parsed->filename);
+    Logger::print("TrackAdded: " + filename +
+                  " (id=" + std::to_string(parsed->track_id) + ")");
+
+    if (consume_pending_upload_if_matches(filename)) {
+        state_.upload_in_progress = false;
+        if (on_upload_status_cb_) {
+            on_upload_status_cb_("track added: " + filename, false);
+        }
+    }
+
+    if (on_track_added_cb_) {
+        on_track_added_cb_(parsed->room_id, parsed->track_id, filename);
+    }
 }
 
 void ClientApp::on_pong()
@@ -248,6 +454,15 @@ void ClientApp::on_error(const std::vector<uint8_t>& body)
     std::ostringstream oss;
     oss << "Server error, code=0x" << std::hex << static_cast<int>(parsed->error_code);
     Logger::print(oss.str());
+
+    StatusCode code = static_cast<StatusCode>(parsed->error_code);
+    if (code == StatusCode::UploadFailed ||
+        code == StatusCode::FileTooLarge ||
+        code == StatusCode::NoUploadInProgress ||
+        code == StatusCode::UploadAlreadyInProgress ||
+        code == StatusCode::NotInRoom) {
+        finish_upload_status(status_to_string(code), true);
+    }
 }
 
 void ClientApp::on_unhandled(PacketType type)
@@ -266,3 +481,21 @@ void ClientApp::connect_to_server(std::function<void(bool)> on_connected)
 {
     connect(server_host_, server_port_, std::move(on_connected));
     }
+
+std::string ClientApp::status_to_string(StatusCode code)
+{
+    switch (code) {
+        case StatusCode::NotInRoom:
+            return "join a room before uploading";
+        case StatusCode::UploadFailed:
+            return "upload failed on server";
+        case StatusCode::FileTooLarge:
+            return "file is too large";
+        case StatusCode::NoUploadInProgress:
+            return "server has no upload in progress";
+        case StatusCode::UploadAlreadyInProgress:
+            return "server upload already in progress";
+        default:
+            return "server error";
+    }
+}
