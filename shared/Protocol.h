@@ -10,8 +10,8 @@ constexpr size_t MESSAGE_MAX_LEN = 64;
 constexpr size_t FILENAME_MAX_LEN = 128;
 constexpr uint32_t MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
-constexpr size_t UDP_SERVER_PORT = 12346;
-constexpr size_t TCP_SERVER_PORT = 12345;
+constexpr size_t UDP_SERVER_PORT = 25046;
+constexpr size_t TCP_SERVER_PORT = 25045;
 
 constexpr int FRAME_DURATION_MS = 20;
 constexpr int TARGET_RATE = 48000;
