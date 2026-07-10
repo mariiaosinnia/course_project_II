@@ -28,11 +28,11 @@ void RoomManager::set_on_track_added(TrackAddedFn fn) {
 }
 
 uint16_t RoomManager::add_track_to_room(uint16_t room_id, const std::string& track_path) {
-    std::unique_lock<std::shared_mutex> lock(mutex);
-
-    auto room_it = rooms.find(room_id);
-    if (room_it == rooms.end() || track_path.empty()) {
-        return 0;
+    {
+        std::shared_lock<std::shared_mutex> lock(mutex);
+        if (rooms.find(room_id) == rooms.end() || track_path.empty()) {
+            return 0;
+        }
     }
 
     uint16_t track_id = 0;
@@ -44,11 +44,21 @@ uint16_t RoomManager::add_track_to_room(uint16_t room_id, const std::string& tra
         return 0;
     }
 
-    room_it->second.track_ids.push_back(track_id);
+    bool should_start_streaming = false;
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex);
 
-    bool first_track = (room_it->second.track_ids.size() == 1);
-    bool has_users = !room_it->second.user_ids.empty();
-    bool should_start_streaming = first_track && has_users;
+        auto room_it = rooms.find(room_id);
+        if (room_it == rooms.end()) {
+            return 0;
+        }
+
+        room_it->second.track_ids.push_back(track_id);
+
+        bool first_track = (room_it->second.track_ids.size() == 1);
+        bool has_users = !room_it->second.user_ids.empty();
+        should_start_streaming = first_track && has_users;
+    }
 
     if (should_start_streaming && on_first_user_joined_) {
         on_first_user_joined_(room_id);
