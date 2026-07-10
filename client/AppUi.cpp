@@ -4,7 +4,7 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/dom/elements.hpp>
 
-using namespace;
+using namespace ftxui;
 
 AppUI::AppUI(ClientApp& app)
     : app_(app)
