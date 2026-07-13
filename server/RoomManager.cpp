@@ -1,4 +1,5 @@
 #include "RoomManager.h"
+#include "PacketBuilder.h"
 #include <iostream>
 
 RoomManager::RoomManager(UserManager& um) : user_manager(um)
@@ -103,19 +104,39 @@ StatusCode RoomManager::join_room(User& user, uint16_t room_id){
 }
 
 StatusCode RoomManager::leave_room(User& user, uint16_t room_id){
-    std::unique_lock<std::shared_mutex> lock(mutex);
+    bool was_speaking = false;
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex);
 
-    if (user.room_id == 0) {
-        return StatusCode::NotInRoom;
+        if (user.room_id == 0) {
+            return StatusCode::NotInRoom;
+        }
+
+        auto room_it = rooms.find(room_id);
+        if (room_it == rooms.end()) {
+            return StatusCode::RoomNotFound;
+        }
+
+        if (user.is_speaking) {
+            room_it->second.speaking_users.erase(user.id);
+            user.is_speaking = false;
+            was_speaking = true;
+        }
+
+        room_it->second.user_ids.erase(user.id);
+        user.room_id = 0;
     }
 
-    auto room_it = rooms.find(room_id);
-    if (room_it == rooms.end()) {
-        return StatusCode::RoomNotFound;
+    if (was_speaking && broadcast_fn) {
+        auto packet = PacketBuilder::voice_stopped(user.id);
+        std::shared_lock lock(mutex);
+        auto room_it = rooms.find(room_id);
+        if (room_it != rooms.end()) {
+            for (uint32_t uid : room_it->second.user_ids) {
+                broadcast_fn(uid, packet);
+            }
+        }
     }
-
-    room_it->second.user_ids.erase(user.id);
-    user.room_id = 0;
 
     return StatusCode::Success;
 }
@@ -203,6 +224,27 @@ std::vector<udp::endpoint> RoomManager::get_udp_endpoints(uint16_t room_id) cons
     return endpoints;
 }
 
+std::vector<udp::endpoint> RoomManager::get_udp_endpoints_except(uint16_t room_id, uint32_t excluded_client_id) const {
+    std::shared_lock lock(mutex);
+
+    auto room_it = rooms.find(room_id);
+    if (room_it == rooms.end()){
+        return {};
+    }
+
+    std::vector<udp::endpoint> endpoints;
+    for (uint32_t user_id : room_it->second.user_ids) {
+        if (user_id == excluded_client_id){ 
+            continue;
+        }
+        User* user = user_manager.get(user_id);
+        if (user && user->udp_endpoint.has_value()) {
+            endpoints.push_back(user->udp_endpoint.value());
+        }
+    }
+    return endpoints;
+}
+
 void RoomManager::registerUdpEndpoint(uint32_t client_id, const udp::endpoint& endpoint) {
     std::unique_lock<std::shared_mutex> lock(mutex);
 
@@ -260,5 +302,96 @@ size_t RoomManager::get_user_count(uint16_t room_id) const {
     if (it != rooms.end()) {
         return it->second.user_ids.size();
     }
+    return 0;
+}
+
+void RoomManager::voice_start(User& user) {
+    if (user.room_id == 0){
+        return;
+    }
+
+    uint16_t room_id = user.room_id;
+    {
+        std::unique_lock lock(mutex);
+        auto it = rooms.find(room_id);
+        if (it == rooms.end()){
+            return;
+        }
+
+        user.is_speaking = true;
+        it->second.speaking_users.insert(user.id);
+    }
+
+    auto packet = PacketBuilder::voice_started(user.id);
+    {
+        std::shared_lock lock(mutex);
+        auto it = rooms.find(room_id);
+        if (it != rooms.end() && broadcast_fn) {
+            for (uint32_t uid : it->second.user_ids) {
+                broadcast_fn(uid, packet);
+            }
+        }
+    }
+
+    std::cout << "Voice started: user=" << user.id << " room=" << room_id << "\n";
+}
+
+void RoomManager::voice_stop(User& user) {
+    if (user.room_id == 0){
+         return;
+    }
+
+    uint16_t room_id = user.room_id;
+    {
+        std::unique_lock lock(mutex);
+        auto it = rooms.find(room_id);
+        if (it == rooms.end()){
+            return;
+        }
+
+        user.is_speaking = false;
+        it->second.speaking_users.erase(user.id);
+    }
+
+    auto packet = PacketBuilder::voice_stopped(user.id);
+    {
+        std::shared_lock lock(mutex);
+        auto it = rooms.find(room_id);
+        if (it != rooms.end() && broadcast_fn) {
+            for (uint32_t uid : it->second.user_ids) {
+                broadcast_fn(uid, packet);
+            }
+        }
+    }
+
+    std::cout << "Voice stopped: user=" << user.id << " room=" << room_id << "\n";
+}
+
+bool RoomManager::has_speakers(uint16_t room_id) const {
+    std::shared_lock lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it == rooms.end()){
+        return false;
+    }
+    return !it->second.speaking_users.empty();
+}
+
+std::optional<uint32_t> RoomManager::find_client_by_endpoint(const udp::endpoint& ep) const {
+    std::shared_lock lock(mutex);
+    for (const auto& [room_id, room] : rooms) {
+        for (uint32_t uid : room.user_ids) {
+            User* user = user_manager.get(uid);
+            if (user && user->udp_endpoint.has_value() && user->udp_endpoint.value() == ep) {
+                return uid;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+uint16_t RoomManager::get_room_id_for_user(uint32_t client_id) const {
+    std::shared_lock lock(mutex);
+    User* user = user_manager.get(client_id);
+    if (user) return user->room_id;
     return 0;
 }

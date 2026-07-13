@@ -19,6 +19,7 @@ struct Room {
     std::string name;
     uint16_t max_users = 1000;
     std::unordered_set<uint32_t> user_ids;
+    std::unordered_set<uint32_t> speaking_users;
     std::vector<uint16_t> track_ids;
     size_t current_track_index = 0;
     std::chrono::steady_clock::time_point track_started_at;
@@ -66,14 +67,20 @@ public:
     void broadcast_to_room(uint16_t room_id, const std::vector<uint8_t>& packet, const User& excluded_user);
     uint32_t get_current_position(uint16_t room_id) const;
     std::vector<udp::endpoint> get_udp_endpoints(uint16_t room_id) const;
+    std::vector<udp::endpoint> get_udp_endpoints_except(uint16_t room_id, uint32_t excluded_client_id) const;
     std::vector<uint16_t> get_active_room_ids() const;
 
     void registerUdpEndpoint(uint32_t client_id, const udp::endpoint& endpoint);
     void start_playback(uint16_t room_id, std::chrono::steady_clock::time_point start_time);
     uint16_t advance_track(uint16_t room_id, std::chrono::steady_clock::time_point start_time);
 
-
     uint16_t get_current_track_id(uint16_t room_id) const;
+
+    void voice_start(User& user);
+    void voice_stop(User& user);
+    bool has_speakers(uint16_t room_id) const;
+    std::optional<uint32_t> find_client_by_endpoint(const udp::endpoint& ep) const;
+    uint16_t get_room_id_for_user(uint32_t client_id) const;
 
     using OnFirstUserJoined = std::function<void(uint16_t)>;
     void set_on_first_user_joined(OnFirstUserJoined fn);

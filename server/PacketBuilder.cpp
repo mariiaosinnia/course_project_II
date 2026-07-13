@@ -107,3 +107,15 @@ std::vector<uint8_t> PacketBuilder::build(PacketType type) {
     std::memcpy(packet.data(), &header, sizeof(header));
     return packet;
 }
+
+std::vector<uint8_t> PacketBuilder::voice_started(uint32_t client_id) {
+    VoiceStartedBody body;
+    body.client_id = boost::endian::native_to_big(client_id);
+    return build(PacketType::VoiceStarted, body);
+}
+
+std::vector<uint8_t> PacketBuilder::voice_stopped(uint32_t client_id) {
+    VoiceStoppedBody body;
+    body.client_id = boost::endian::native_to_big(client_id);
+    return build(PacketType::VoiceStopped, body);
+}

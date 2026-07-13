@@ -26,6 +26,8 @@ std::vector<uint8_t> Executor::execute(User& user, PacketType type,
         case PacketType::JoinRoom: return handle_join_room(user, body);
         case PacketType::LeaveRoom: return handle_leave_room(user);
         case PacketType::ListRooms: return handle_list_rooms();
+        case PacketType::VoiceStart: return handle_voice_start(user);
+        case PacketType::VoiceStop: return handle_voice_stop(user);
         case PacketType::UploadTrackBegin: return handle_upload_begin(user, body);
         case PacketType::UploadTrackData: return handle_upload_data(user, body);
         case PacketType::UploadTrackEnd: return handle_upload_end(user);
@@ -230,4 +232,20 @@ std::vector<uint8_t> Executor::handle_upload_end(User& user) {
     std::vector<uint8_t> packet = PacketBuilder::track_added(room_id, track_id, filename.c_str());
     room_manager.broadcast_to_room(room_id, packet, user);
     return packet;
+}
+
+std::vector<uint8_t> Executor::handle_voice_start(User& user) {
+    if (user.room_id == 0) {
+        return PacketBuilder::error(StatusCode::NotInRoom);
+    }
+    room_manager.voice_start(user);
+    return {};
+}
+
+std::vector<uint8_t> Executor::handle_voice_stop(User& user) {
+    if (user.room_id == 0) {
+        return PacketBuilder::error(StatusCode::NotInRoom);
+    }
+    room_manager.voice_stop(user);
+    return {};
 }
