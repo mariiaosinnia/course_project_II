@@ -1,5 +1,6 @@
 #include "TCPServer.h"
 #include "TCPConnection.h"
+#include "PacketBuilder.h"
 #include <iostream>
 
 TCPServer::TCPServer(boost::asio::io_context& io, RoomManager& rm, UserManager& um)
@@ -36,9 +37,17 @@ void TCPServer::release_id(uint32_t id) {
 void TCPServer::start_accept() {
     auto connection = TCPConnection::create(io_context,
         [this](uint32_t id) {
+            User* user = user_manager.get(id);
+            if (user && user->room_id != 0) {
+                uint16_t room_id = user->room_id;
+                room_manager.leave_room(*user, room_id);
+
+                auto packet = PacketBuilder::user_left(id);
+                room_manager.broadcast_to_room(room_id, packet, *user);
+            }
+            active_connections.erase(id);
             user_manager.remove(id);
             release_id(id);
-            active_connections.erase(id);
         },
         room_manager);
 
