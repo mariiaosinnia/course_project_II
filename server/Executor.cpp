@@ -26,6 +26,8 @@ std::vector<uint8_t> Executor::execute(User& user, PacketType type,
         case PacketType::JoinRoom: return handle_join_room(user, body);
         case PacketType::LeaveRoom: return handle_leave_room(user);
         case PacketType::ListRooms: return handle_list_rooms();
+        case PacketType::ListTracks: return handle_list_tracks();
+        case PacketType::TrackSelect: return handle_track_select(user, body);
         case PacketType::VoiceStart: return handle_voice_start(user);
         case PacketType::VoiceStop: return handle_voice_stop(user);
         case PacketType::UploadTrackBegin: return handle_upload_begin(user, body);
@@ -103,6 +105,36 @@ std::vector<uint8_t> Executor::handle_leave_room(User& user) {
 std::vector<uint8_t> Executor::handle_list_rooms() {
     std::vector<RoomListEntry> rooms = room_manager.list_rooms();
     return PacketBuilder::room_list(rooms);
+}
+
+std::vector<uint8_t> Executor::handle_list_tracks() {
+    std::vector<TrackListEntry> tracks = room_manager.list_tracks();
+    return PacketBuilder::track_list(tracks);
+}
+
+std::vector<uint8_t> Executor::handle_track_select(User& user, const std::vector<uint8_t>& body) {
+    if (user.room_id == 0) {
+        return PacketBuilder::error(StatusCode::NotInRoom);
+    }
+
+    std::optional<TrackSelectBody> parsed = PacketParser::parse_track_select(body);
+    if (!parsed) {
+        return PacketBuilder::error(StatusCode::Unknown);
+    }
+
+    uint16_t room_id = user.room_id;
+    StatusCode status = room_manager.select_track_for_room(room_id, parsed->track_id);
+    if (status != StatusCode::Success) {
+        return PacketBuilder::error(status);
+    }
+
+    std::cout << "Track selected: user=" << user.id
+              << " room=" << room_id
+              << " track_id=" << parsed->track_id << "\n";
+
+    std::vector<uint8_t> packet = PacketBuilder::track_added(room_id, parsed->track_id, "");
+    room_manager.broadcast_to_room(room_id, packet, user);
+    return packet;
 }
 std::vector<uint8_t> Executor::handle_upload_begin(User& user, const std::vector<uint8_t>& body) {
     if (user.room_id == 0) {

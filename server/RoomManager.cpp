@@ -401,3 +401,54 @@ uint16_t RoomManager::get_room_id_for_user(uint32_t client_id) const {
     if (user) return user->room_id;
     return 0;
 }
+
+void RoomManager::set_list_tracks_fn(ListTracksFn fn) {
+    list_tracks_fn_ = std::move(fn);
+}
+
+std::vector<TrackListEntry> RoomManager::list_tracks() const {
+    if (list_tracks_fn_) {
+        return list_tracks_fn_();
+    }
+    return {};
+}
+
+void RoomManager::set_track_exists_fn(TrackExistsFn fn) {
+    track_exists_fn_ = std::move(fn);
+}
+
+StatusCode RoomManager::select_track_for_room(uint16_t room_id, uint16_t track_id) {
+    if (!track_exists_fn_ || !track_exists_fn_(track_id)) {
+        return StatusCode::TrackNotFound;
+    }
+
+    bool should_start_streaming = false;
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex);
+
+        auto room_it = rooms.find(room_id);
+        if (room_it == rooms.end()) {
+            return StatusCode::RoomNotFound;
+        }
+
+        Room& room = room_it->second;
+
+        for (uint16_t existing_id : room.track_ids) {
+            if (existing_id == track_id) {
+                return StatusCode::Success;
+            }
+        }
+
+        room.track_ids.push_back(track_id);
+
+        bool first_track = (room.track_ids.size() == 1);
+        bool has_users = !room.user_ids.empty();
+        should_start_streaming = first_track && has_users;
+    }
+
+    if (should_start_streaming && on_first_user_joined_) {
+        on_first_user_joined_(room_id);
+    }
+
+    return StatusCode::Success;
+}

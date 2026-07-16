@@ -15,6 +15,16 @@ Server::Server()
     room_manager.set_on_track_added([this](const std::string& track_path) {
         return udp_server.addTrack(track_path);
     });
+
+    room_manager.set_list_tracks_fn([this]() -> std::vector<TrackListEntry> {
+        // TODO: UDP team — реалізувати отримання списку треків з UdpAudioServer
+        return {};
+    });
+
+    room_manager.set_track_exists_fn([this](uint16_t track_id) -> bool {
+        // TODO: UDP team — перевірка чи трек існує в UdpAudioServer::tracks_
+        return false;
+    });
 }
 
 void Server::run() {

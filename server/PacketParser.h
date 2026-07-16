@@ -11,4 +11,5 @@ public:
 	static std::optional<JoinRoomBody> parse_join_room(const std::vector<uint8_t>& body);
 	static std::optional<CreateRoomBody> parse_create_room(const std::vector<uint8_t>& body);
 	static std::optional<UploadTrackBeginBody> parse_upload_begin(const std::vector<uint8_t>& body);
+	static std::optional<TrackSelectBody> parse_track_select(const std::vector<uint8_t>& body);
 };

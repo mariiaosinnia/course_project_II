@@ -20,6 +20,7 @@ public:
     static std::vector<uint8_t> track_added(uint16_t room_id, uint16_t track_id, const char* filename);
     static std::vector<uint8_t> voice_started(uint32_t client_id);
     static std::vector<uint8_t> voice_stopped(uint32_t client_id);
+    static std::vector<uint8_t> track_list(const std::vector<TrackListEntry>& tracks);
 private:
     static std::vector<uint8_t> build(PacketType type);
     template<typename T>

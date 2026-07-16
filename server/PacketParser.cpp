@@ -56,3 +56,16 @@ std::optional<UploadTrackBeginBody> PacketParser::parse_upload_begin(const std::
 	return result;
 }
 
+std::optional<TrackSelectBody> PacketParser::parse_track_select(const std::vector<uint8_t>& body)
+{
+	if (body.size() < sizeof(TrackSelectBody)) {
+		return std::nullopt;
+	}
+
+	TrackSelectBody result;
+	std::memcpy(&result, body.data(), sizeof(result));
+	result.track_id = boost::endian::big_to_native(result.track_id);
+
+	return result;
+}
+
