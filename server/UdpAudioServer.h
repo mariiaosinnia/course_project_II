@@ -37,6 +37,9 @@ public:
     void registerClient(uint32_t client_id, const udp::endpoint& endpoint);
 
     void run();
+    std::vector<TrackListEntry> getTrackList() const;
+    bool isTrackExists(uint16_t track_id) const;
+
 
 private:
     void receiveLoop();

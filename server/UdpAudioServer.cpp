@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <cstring>
 
 
 
@@ -194,4 +195,19 @@ void UdpAudioServer::receiveLoop() {
             registerClient(client_id, sender);
         }
     }
+}
+
+std::vector<TrackListEntry> UdpAudioServer::getTrackList() const {
+    std::vector<TrackListEntry> result;
+    for (const auto& [id, track] : tracks_) {
+        TrackListEntry element{};
+        element.track_id = id;
+        std::strncpy(element.filename, track->name.c_str(), sizeof(element.filename) - 1);
+        result.push_back(element);
+    }
+    return result;
+}
+
+bool UdpAudioServer::isTrackExists(uint16_t track_id) const {
+    return tracks_.find(track_id) != tracks_.end();
 }

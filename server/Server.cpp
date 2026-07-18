@@ -17,13 +17,11 @@ Server::Server()
     });
 
     room_manager.set_list_tracks_fn([this]() -> std::vector<TrackListEntry> {
-        // TODO: UDP team — реалізувати отримання списку треків з UdpAudioServer
-        return {};
+       return  udp_server.getTrackList();
     });
 
     room_manager.set_track_exists_fn([this](uint16_t track_id) -> bool {
-        // TODO: UDP team — перевірка чи трек існує в UdpAudioServer::tracks_
-        return false;
+        return  udp_server.isTrackExists(track_id);
     });
 }
 
