@@ -88,6 +88,15 @@ public:
     using TrackAddedFn = std::function<uint16_t(const std::string&)>;
     void set_on_track_added(TrackAddedFn fn);
 
+    using ListTracksFn = std::function<std::vector<TrackListEntry>()>;
+    void set_list_tracks_fn(ListTracksFn fn);
+    std::vector<TrackListEntry> list_tracks() const;
+
+    using TrackExistsFn = std::function<bool(uint16_t)>;
+    void set_track_exists_fn(TrackExistsFn fn);
+
+    StatusCode select_track_for_room(uint16_t room_id, uint16_t track_id);
+
 private:
     mutable std::shared_mutex mutex;
     std::unordered_map<uint16_t, Room> rooms;
@@ -96,4 +105,6 @@ private:
     UserManager& user_manager;
     OnFirstUserJoined on_first_user_joined_;
     TrackAddedFn on_track_added_;
+    ListTracksFn list_tracks_fn_;
+    TrackExistsFn track_exists_fn_;
 };

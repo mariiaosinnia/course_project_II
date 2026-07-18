@@ -25,6 +25,8 @@ private:
     std::vector<uint8_t> handle_join_room(User& user, const std::vector<uint8_t>& body);
     std::vector<uint8_t> handle_leave_room(User& user);
     std::vector<uint8_t> handle_list_rooms();
+    std::vector<uint8_t> handle_list_tracks();
+    std::vector<uint8_t> handle_track_select(User& user, const std::vector<uint8_t>& body);
     std::vector<uint8_t> handle_voice_start(User& user);
     std::vector<uint8_t> handle_voice_stop(User& user);
 

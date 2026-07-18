@@ -119,3 +119,28 @@ std::vector<uint8_t> PacketBuilder::voice_stopped(uint32_t client_id) {
     body.client_id = boost::endian::native_to_big(client_id);
     return build(PacketType::VoiceStopped, body);
 }
+
+std::vector<uint8_t> PacketBuilder::track_list(const std::vector<TrackListEntry>& tracks) {
+    TrackListHeader list_header;
+    list_header.track_count = static_cast<uint8_t>(tracks.size());
+
+    uint16_t payload_size = sizeof(TrackListHeader) + tracks.size() * sizeof(TrackListEntry);
+
+    PacketHeader header;
+    header.type = static_cast<uint8_t>(PacketType::TrackList);
+    header.payload_size = boost::endian::native_to_big(payload_size);
+
+    std::vector<uint8_t> packet(sizeof(PacketHeader) + payload_size);
+    std::memcpy(packet.data(), &header, sizeof(PacketHeader));
+    std::memcpy(packet.data() + sizeof(PacketHeader), &list_header, sizeof(TrackListHeader));
+
+    size_t offset = sizeof(PacketHeader) + sizeof(TrackListHeader);
+    for (const TrackListEntry& entry : tracks) {
+        TrackListEntry e = entry;
+        e.track_id = boost::endian::native_to_big(e.track_id);
+        std::memcpy(packet.data() + offset, &e, sizeof(TrackListEntry));
+        offset += sizeof(TrackListEntry);
+    }
+
+    return packet;
+}

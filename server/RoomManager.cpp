@@ -105,6 +105,7 @@ StatusCode RoomManager::join_room(User& user, uint16_t room_id){
 
 StatusCode RoomManager::leave_room(User& user, uint16_t room_id){
     bool was_speaking = false;
+    std::vector<uint32_t> recipients;
     {
         std::unique_lock<std::shared_mutex> lock(mutex);
 
@@ -125,16 +126,17 @@ StatusCode RoomManager::leave_room(User& user, uint16_t room_id){
 
         room_it->second.user_ids.erase(user.id);
         user.room_id = 0;
+
+        if (was_speaking) {
+            recipients.assign(room_it->second.user_ids.begin(),
+                              room_it->second.user_ids.end());
+        }
     }
 
     if (was_speaking && broadcast_fn) {
         auto packet = PacketBuilder::voice_stopped(user.id);
-        std::shared_lock lock(mutex);
-        auto room_it = rooms.find(room_id);
-        if (room_it != rooms.end()) {
-            for (uint32_t uid : room_it->second.user_ids) {
-                broadcast_fn(uid, packet);
-            }
+        for (uint32_t uid : recipients) {
+            broadcast_fn(uid, packet);
         }
     }
 
@@ -163,13 +165,15 @@ std::vector<UserInfo> RoomManager::get_users_in_room(uint16_t room_id) const {
 
     std::vector<UserInfo> result;
     for (uint32_t id : it->second.user_ids) {
+        User* user = user_manager.get(id);
+        if (!user){ 
+            continue;
+        }
+
         UserInfo info;
         info.client_id = id;
-        User* user = user_manager.get(id);
-        if (user) {
-            std::strncpy(info.username, user->name.c_str(), USERNAME_MAX_LEN - 1);
-            info.username[USERNAME_MAX_LEN - 1] = '\0';
-        }
+        std::strncpy(info.username, user->name.c_str(), USERNAME_MAX_LEN - 1);
+        info.username[USERNAME_MAX_LEN - 1] = '\0';
         result.push_back(info);
     }
     return result;
@@ -180,22 +184,26 @@ void RoomManager::set_broadcast(BroadcastFn fn){
 }
 
 void RoomManager::broadcast_to_room(uint16_t room_id, const std::vector<uint8_t>& packet, const User& excluded_user){
-    std::shared_lock lock(mutex);
-    auto room_it = rooms.find(room_id);
-
-    if (room_it == rooms.end()) {
-        return;
-    }
-
-    Room& room = room_it->second;
-
-    for (const uint32_t user_id : room.user_ids)
+    std::vector<uint32_t> recipients;
     {
-        if (user_id == excluded_user.id) {
-            continue;
+        std::shared_lock lock(mutex);
+        auto room_it = rooms.find(room_id);
+
+        if (room_it == rooms.end()) {
+            return;
         }
 
-        broadcast_fn(user_id, packet);
+        for (const uint32_t user_id : room_it->second.user_ids) {
+            if (user_id != excluded_user.id) {
+                recipients.push_back(user_id);
+            }
+        }
+    }
+
+    if (broadcast_fn) {
+        for (uint32_t uid : recipients) {
+            broadcast_fn(uid, packet);
+        }
     }
 }
 
@@ -311,6 +319,7 @@ void RoomManager::voice_start(User& user) {
     }
 
     uint16_t room_id = user.room_id;
+    std::vector<uint32_t> recipients;
     {
         std::unique_lock lock(mutex);
         auto it = rooms.find(room_id);
@@ -320,16 +329,14 @@ void RoomManager::voice_start(User& user) {
 
         user.is_speaking = true;
         it->second.speaking_users.insert(user.id);
+        recipients.assign(it->second.user_ids.begin(),
+                          it->second.user_ids.end());
     }
 
-    auto packet = PacketBuilder::voice_started(user.id);
-    {
-        std::shared_lock lock(mutex);
-        auto it = rooms.find(room_id);
-        if (it != rooms.end() && broadcast_fn) {
-            for (uint32_t uid : it->second.user_ids) {
-                broadcast_fn(uid, packet);
-            }
+    if (broadcast_fn) {
+        auto packet = PacketBuilder::voice_started(user.id);
+        for (uint32_t uid : recipients) {
+            broadcast_fn(uid, packet);
         }
     }
 
@@ -342,6 +349,7 @@ void RoomManager::voice_stop(User& user) {
     }
 
     uint16_t room_id = user.room_id;
+    std::vector<uint32_t> recipients;
     {
         std::unique_lock lock(mutex);
         auto it = rooms.find(room_id);
@@ -351,16 +359,14 @@ void RoomManager::voice_stop(User& user) {
 
         user.is_speaking = false;
         it->second.speaking_users.erase(user.id);
+        recipients.assign(it->second.user_ids.begin(),
+                          it->second.user_ids.end());
     }
 
-    auto packet = PacketBuilder::voice_stopped(user.id);
-    {
-        std::shared_lock lock(mutex);
-        auto it = rooms.find(room_id);
-        if (it != rooms.end() && broadcast_fn) {
-            for (uint32_t uid : it->second.user_ids) {
-                broadcast_fn(uid, packet);
-            }
+    if (broadcast_fn) {
+        auto packet = PacketBuilder::voice_stopped(user.id);
+        for (uint32_t uid : recipients) {
+            broadcast_fn(uid, packet);
         }
     }
 
@@ -394,4 +400,55 @@ uint16_t RoomManager::get_room_id_for_user(uint32_t client_id) const {
     User* user = user_manager.get(client_id);
     if (user) return user->room_id;
     return 0;
+}
+
+void RoomManager::set_list_tracks_fn(ListTracksFn fn) {
+    list_tracks_fn_ = std::move(fn);
+}
+
+std::vector<TrackListEntry> RoomManager::list_tracks() const {
+    if (list_tracks_fn_) {
+        return list_tracks_fn_();
+    }
+    return {};
+}
+
+void RoomManager::set_track_exists_fn(TrackExistsFn fn) {
+    track_exists_fn_ = std::move(fn);
+}
+
+StatusCode RoomManager::select_track_for_room(uint16_t room_id, uint16_t track_id) {
+    if (!track_exists_fn_ || !track_exists_fn_(track_id)) {
+        return StatusCode::TrackNotFound;
+    }
+
+    bool should_start_streaming = false;
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex);
+
+        auto room_it = rooms.find(room_id);
+        if (room_it == rooms.end()) {
+            return StatusCode::RoomNotFound;
+        }
+
+        Room& room = room_it->second;
+
+        for (uint16_t existing_id : room.track_ids) {
+            if (existing_id == track_id) {
+                return StatusCode::Success;
+            }
+        }
+
+        room.track_ids.push_back(track_id);
+
+        bool first_track = (room.track_ids.size() == 1);
+        bool has_users = !room.user_ids.empty();
+        should_start_streaming = first_track && has_users;
+    }
+
+    if (should_start_streaming && on_first_user_joined_) {
+        on_first_user_joined_(room_id);
+    }
+
+    return StatusCode::Success;
 }

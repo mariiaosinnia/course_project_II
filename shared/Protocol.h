@@ -33,6 +33,7 @@ enum class PacketType : uint8_t {
     UploadTrackBegin = 0x0B,
     UploadTrackData = 0x0C,
     UploadTrackEnd = 0x0D,
+    ListTracks = 0x0E,
 
     // server → client
     Connected = 0x10,
@@ -48,6 +49,7 @@ enum class PacketType : uint8_t {
     VoiceStopped = 0x1A,
     Pong = 0x1B,
     TrackAdded = 0x1C,
+    TrackList = 0x1D,
     Error = 0x1F,
 };
 
@@ -61,6 +63,7 @@ enum class StatusCode : uint8_t {
     FileTooLarge = 0x06,
     NoUploadInProgress = 0x07,
     UploadAlreadyInProgress = 0x08,
+    TrackNotFound = 0x09,
     Unknown = 0xFF
 };
 
@@ -93,9 +96,9 @@ struct UploadTrackBeginBody {
 // UploadTrackData — body is raw file bytes, no struct needed
 // UploadTrackEnd — no body
 
-//struct TrackSelectBody {
-//    uint8_t track_id;
-//};
+struct TrackSelectBody {
+    uint16_t track_id;
+};
 
 // LeaveRoom, ListRooms, VoiceStart, VoiceStop, Ping, Disconnect — no body
 
@@ -149,6 +152,15 @@ struct TrackAddedBody {
     uint16_t room_id;
     uint16_t track_id;
     char filename[FILENAME_MAX_LEN];
+};
+
+struct TrackListEntry {
+    uint16_t track_id;
+    char filename[FILENAME_MAX_LEN];
+};
+
+struct TrackListHeader {
+    uint8_t track_count;
 };
  
 //struct TrackSyncBody {
