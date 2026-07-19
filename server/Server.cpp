@@ -25,6 +25,14 @@ Server::Server()
         // TODO: UDP team — перевірка чи трек існує в UdpAudioServer::tracks_
         return false;
     });
+
+    room_manager.set_on_voice_start([this](uint32_t client_id, uint16_t room_id) {
+        udp_server.onVoiceStart(client_id, room_id);
+    });
+
+    room_manager.set_on_voice_stop([this](uint32_t client_id, uint16_t room_id) {
+        udp_server.onVoiceStop(client_id, room_id);
+    });
 }
 
 void Server::run() {

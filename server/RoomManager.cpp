@@ -340,6 +340,10 @@ void RoomManager::voice_start(User& user) {
         }
     }
 
+    if (on_voice_start_) {
+        on_voice_start_(user.id, room_id);
+    }
+
     std::cout << "Voice started: user=" << user.id << " room=" << room_id << "\n";
 }
 
@@ -368,6 +372,10 @@ void RoomManager::voice_stop(User& user) {
         for (uint32_t uid : recipients) {
             broadcast_fn(uid, packet);
         }
+    }
+
+    if (on_voice_stop_) {
+        on_voice_stop_(user.id, room_id);
     }
 
     std::cout << "Voice stopped: user=" << user.id << " room=" << room_id << "\n";
@@ -415,6 +423,14 @@ std::vector<TrackListEntry> RoomManager::list_tracks() const {
 
 void RoomManager::set_track_exists_fn(TrackExistsFn fn) {
     track_exists_fn_ = std::move(fn);
+}
+
+void RoomManager::set_on_voice_start(VoiceEventFn fn) {
+    on_voice_start_ = std::move(fn);
+}
+
+void RoomManager::set_on_voice_stop(VoiceEventFn fn) {
+    on_voice_stop_ = std::move(fn);
 }
 
 StatusCode RoomManager::select_track_for_room(uint16_t room_id, uint16_t track_id) {
