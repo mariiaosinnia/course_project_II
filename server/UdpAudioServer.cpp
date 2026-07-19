@@ -168,6 +168,14 @@ void UdpAudioServer::registerClient(uint32_t client_id, const udp::endpoint& end
               << ":" << endpoint.port() << "\n";
 }
 
+void UdpAudioServer::onVoiceStart(uint32_t client_id, uint16_t room_id) {
+
+}
+
+void UdpAudioServer::onVoiceStop(uint32_t client_id, uint16_t room_id) {
+
+}
+
 void UdpAudioServer::run() {
     std::cout << "UDP AudioServer listening...\n";
     std::thread scheduler(&UdpAudioServer::schedulerLoop, this);

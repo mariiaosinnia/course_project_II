@@ -95,6 +95,10 @@ public:
     using TrackExistsFn = std::function<bool(uint16_t)>;
     void set_track_exists_fn(TrackExistsFn fn);
 
+    using VoiceEventFn = std::function<void(uint32_t client_id, uint16_t room_id)>;
+    void set_on_voice_start(VoiceEventFn fn);
+    void set_on_voice_stop(VoiceEventFn fn);
+
     StatusCode select_track_for_room(uint16_t room_id, uint16_t track_id);
 
 private:
@@ -107,4 +111,6 @@ private:
     TrackAddedFn on_track_added_;
     ListTracksFn list_tracks_fn_;
     TrackExistsFn track_exists_fn_;
+    VoiceEventFn on_voice_start_;
+    VoiceEventFn on_voice_stop_;
 };
