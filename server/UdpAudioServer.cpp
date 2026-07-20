@@ -1,4 +1,3 @@
-#define DR_MP3_IMPLEMENTATION
 #include "UdpAudioServer.h"
 #include <iostream>
 #include <memory>

@@ -14,7 +14,7 @@ std::vector<uint8_t> MusicStreamer::buildPacket(uint32_t seq, const std::vector<
     packet[6] = static_cast<uint8_t>((track_position_ms >> 8)  & 0xFF);
     packet[7] = static_cast<uint8_t>( track_position_ms        & 0xFF);
 
-    std::memcpy(packet.data() + 4, opus.data(), opus.size());
+    std::memcpy(packet.data() + 8, opus.data(), opus.size());
 
     return packet;
 }
