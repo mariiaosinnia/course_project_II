@@ -105,7 +105,9 @@ void UdpAudioServer::schedulerLoop() {
 
                     // 2. Якщо трек ще грає (або ми щойно його перемкнули), беремо пакет
                     const auto& opus_data = state.track->opus_packets[state.current_packet_index];
-                    auto packet = MusicStreamer::buildPacket(state.sequence_number, opus_data);
+                    // додаю час треку всередині пакету для drift correction
+                    uint32_t track_position_ms = state.current_packet_index * FRAME_DURATION_MS;
+                    auto packet = MusicStreamer::buildPacket(state.sequence_number, opus_data, track_position_ms);
 
                     // 3. Розсилаємо
                     auto endpoints = room_manager_.get_udp_endpoints(it->first);
