@@ -145,7 +145,7 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
         return;
     }
 
-    if (bytes_received < 4) {
+    if (bytes_received < 8) {
         start_receive();
         return;
     }
@@ -156,6 +156,13 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
         (static_cast<uint32_t>(recv_buffer_[2]) << 8) |
         (static_cast<uint32_t>(recv_buffer_[3]));
 
+    server_position_ms_ =
+            (static_cast<uint32_t>(recv_buffer_[4]) << 24) |
+            (static_cast<uint32_t>(recv_buffer_[5]) << 16) |
+            (static_cast<uint32_t>(recv_buffer_[6]) << 8) |
+            (static_cast<uint32_t>(recv_buffer_[7]));
+
+
     if (!first_packet_ && seq != expected_seq_) {
         Logger::print("[warning] sequence gap: expected " + std::to_string(expected_seq_) +
                        ", got " + std::to_string(seq));
@@ -163,8 +170,8 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
     expected_seq_ = seq + 1;
     first_packet_ = false;
 
-    const unsigned char* opus_payload = recv_buffer_.data() + 4;
-    int opus_payload_size = static_cast<int>(bytes_received - 4);
+    const unsigned char* opus_payload = recv_buffer_.data() + 8;
+    int opus_payload_size = static_cast<int>(bytes_received - 8);
 
     std::vector<int16_t> pcm_frame(SAMPLES_PER_FRAME * CHANNELS);
     int decoded_samples = opus_decode(
@@ -209,9 +216,30 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
         prebuffering_ = false;
     }
 
+    constexpr uint32_t BUFFER_OFFSET_MS = PREBUFFER_FRAMES * FRAME_DURATION_MS; // 10 * 20 = 200ms
+
+    int32_t drift_ms = static_cast<int32_t>(server_position_ms_.load())
+                 - static_cast<int32_t>(playback_position_ms_.load())
+                 - static_cast<int32_t>(BUFFER_OFFSET_MS);
+
+    int32_t drift_frames = drift_ms / FRAME_DURATION_MS;
+
+    if (drift_frames > 3) {
+        std::vector<int16_t> dummy;
+        pcm_queue_.pop(dummy);
+        playback_position_ms_.fetch_add(FRAME_DURATION_MS);
+    } else if (drift_frames < -3) {
+        if (!last_frame_.empty() && last_frame_.size() == frame_count * CHANNELS) {  // додати перевірку розміру
+            std::memcpy(out, last_frame_.data(), last_frame_.size() * sizeof(int16_t));
+            return paContinue;
+        }
+    }
+
     std::vector<int16_t> frame;
     if (pcm_queue_.pop(frame) && frame.size() == frame_count * CHANNELS) {
         std::memcpy(out, frame.data(), frame.size() * sizeof(int16_t));
+        last_frame_ = frame;
+        playback_position_ms_.fetch_add(FRAME_DURATION_MS);
         consecutive_underruns_ = 0;
     } else {
         std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));

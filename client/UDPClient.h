@@ -77,6 +77,11 @@ private:
     std::atomic<uint64_t> underruns_{0};
     int consecutive_underruns_ = 0;
 
+    std::atomic<uint32_t> server_position_ms_{0};
+    std::atomic<uint32_t> playback_position_ms_{0};
+
+    std::vector<int16_t> last_frame_;
+
     bool prebuffering_{true};
     static constexpr size_t PREBUFFER_FRAMES = 5;
 };
