@@ -212,10 +212,16 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
     std::vector<int16_t> frame;
     if (pcm_queue_.pop(frame) && frame.size() == frame_count * CHANNELS) {
         std::memcpy(out, frame.data(), frame.size() * sizeof(int16_t));
+        consecutive_underruns_ = 0;
     } else {
         std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));
         underruns_++;
-        prebuffering_ = true;
+        consecutive_underruns_++;
+
+        if (consecutive_underruns_ >= 3) {
+            prebuffering_ = true;
+            consecutive_underruns_ = 0;
+        }
     }
 
     return paContinue;

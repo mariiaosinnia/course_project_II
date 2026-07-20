@@ -75,7 +75,8 @@ private:
     PcmQueue pcm_queue_;
     std::atomic<uint64_t> packets_received_{0};
     std::atomic<uint64_t> underruns_{0};
+    int consecutive_underruns_ = 0;
 
     bool prebuffering_{true};
-    static constexpr size_t PREBUFFER_FRAMES = 10;
+    static constexpr size_t PREBUFFER_FRAMES = 5;
 };
