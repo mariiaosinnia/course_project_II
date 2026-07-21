@@ -15,15 +15,19 @@ constexpr int SAMPLE_RATE = 48000;
 constexpr int CHANNELS = 2;
 constexpr int SAMPLES_PER_FRAME = SAMPLE_RATE * FRAME_DURATION_MS / 1000;
 
+struct AudioFrame {
+    std::vector<int16_t> pcm;
+    uint32_t pts_ms{0};
+};
+
 class PcmQueue {
 public:
-    void push(std::vector<int16_t> frame);
-    bool pop(std::vector<int16_t>& out);
+    void push(AudioFrame frame);
+    bool pop(AudioFrame& out);
     size_t size();
-
 private:
+    std::deque<AudioFrame> queue_;
     std::mutex mutex_;
-    std::deque<std::vector<int16_t>> queue_;
 };
 
 // UdpClient тепер не володіє власним io_context/потоком - він живе на
@@ -53,6 +57,8 @@ private:
     void send_registration();
     void start_receive();
     void handle_receive(const boost::system::error_code& ec, size_t bytes_received);
+    void handle_music_packet(size_t bytes_received);
+    void handle_voice_packet(size_t bytes_received);
 
     boost::asio::io_context& io_context_;
     boost::asio::ip::udp::socket socket_;
@@ -65,6 +71,9 @@ private:
 
     OpusDecoder* decoder_{nullptr};
     PaStream* stream_{nullptr};
+
+    OpusDecoder* voice_decoder_{nullptr};
+    PcmQueue voice_queue_;
 
     std::atomic<bool> running_{false};
 
@@ -83,5 +92,5 @@ private:
     std::vector<int16_t> last_frame_;
 
     bool prebuffering_{true};
-    static constexpr size_t PREBUFFER_FRAMES = 5;
+    static constexpr size_t PREBUFFER_FRAMES = 10;
 };

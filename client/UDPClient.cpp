@@ -4,12 +4,12 @@
 
 using boost::asio::ip::udp;
 
-void PcmQueue::push(std::vector<int16_t> frame) {
+void PcmQueue::push(AudioFrame frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     queue_.push_back(std::move(frame));
 }
 
-bool PcmQueue::pop(std::vector<int16_t>& out) {
+bool PcmQueue::pop(AudioFrame& out) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (queue_.empty()) return false;
     out = std::move(queue_.front());
@@ -44,6 +44,13 @@ bool UdpClient::start() {
     decoder_ = opus_decoder_create(SAMPLE_RATE, CHANNELS, &opus_error);
     if (opus_error != OPUS_OK) {
         Logger::print(std::string("Failed to create Opus decoder: ") + opus_strerror(opus_error));
+        return false;
+    }
+
+    int voice_opus_error = 0;
+    voice_decoder_ = opus_decoder_create(SAMPLE_RATE, CHANNELS, &voice_opus_error);
+    if (voice_opus_error != OPUS_OK) {
+        Logger::print(std::string("Failed to create Opus decoder fro voice: ") + opus_strerror(opus_error));
         return false;
     }
 
@@ -100,6 +107,10 @@ void UdpClient::stop() {
         opus_decoder_destroy(decoder_);
         decoder_ = nullptr;
     }
+    if (voice_decoder_) {
+        opus_decoder_destroy(voice_decoder_);
+        voice_decoder_ = nullptr;
+    }
 }
 
 void UdpClient::send_registration() {
@@ -108,13 +119,12 @@ void UdpClient::send_registration() {
                    std::to_string(client_id_));
 
     std::vector<unsigned char> packet(5);
-    packet[0] = 0xFF;
+    packet[0] = static_cast<unsigned char>(UdpPacketType::Registration);
     packet[1] = static_cast<unsigned char>((client_id_ >> 24) & 0xFF);
     packet[2] = static_cast<unsigned char>((client_id_ >> 16) & 0xFF);
     packet[3] = static_cast<unsigned char>((client_id_ >> 8)  & 0xFF);
     packet[4] = static_cast<unsigned char>( client_id_        & 0xFF);
 
-    // Синхронна відправка — гарантовано йде одразу
     boost::system::error_code ec;
     socket_.send_to(boost::asio::buffer(packet), server_endpoint_, 0, ec);
     if (ec) {
@@ -134,6 +144,7 @@ void UdpClient::start_receive() {
         });
 }
 
+
 void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes_received) {
     if (!running_ || ec == boost::asio::error::operation_aborted) {
         return;
@@ -145,23 +156,54 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
         return;
     }
 
-    if (bytes_received < 8) {
+    if (bytes_received < 1) {
         start_receive();
         return;
     }
 
+    UdpPacketType type = static_cast<UdpPacketType>(recv_buffer_[0]);
+
+    switch (type) {
+        case UdpPacketType::Music:
+            handle_music_packet(bytes_received);
+            break;
+        case UdpPacketType::Voice:
+            handle_voice_packet(bytes_received);
+            break;
+        default:
+            Logger::print("[warning] unknown UDP packet type received");
+            break;
+    }
+
+    start_receive();
+}
+
+void UdpClient::handle_music_packet(size_t bytes_received) {
+    if (bytes_received < 9) {  // 1 (type) + 4 (seq) + 4 (position)
+        return;
+    }
+
     uint32_t seq =
-        (static_cast<uint32_t>(recv_buffer_[0]) << 24) |
-        (static_cast<uint32_t>(recv_buffer_[1]) << 16) |
-        (static_cast<uint32_t>(recv_buffer_[2]) << 8) |
-        (static_cast<uint32_t>(recv_buffer_[3]));
+        (static_cast<uint32_t>(recv_buffer_[1]) << 24) |
+        (static_cast<uint32_t>(recv_buffer_[2]) << 16) |
+        (static_cast<uint32_t>(recv_buffer_[3]) << 8)  |
+        (static_cast<uint32_t>(recv_buffer_[4]));
 
-    server_position_ms_ =
-            (static_cast<uint32_t>(recv_buffer_[4]) << 24) |
-            (static_cast<uint32_t>(recv_buffer_[5]) << 16) |
-            (static_cast<uint32_t>(recv_buffer_[6]) << 8) |
-            (static_cast<uint32_t>(recv_buffer_[7]));
+    uint32_t prev_server_position = server_position_ms_.load();
 
+    uint32_t new_position =
+        (static_cast<uint32_t>(recv_buffer_[5]) << 24) |
+        (static_cast<uint32_t>(recv_buffer_[6]) << 16) |
+        (static_cast<uint32_t>(recv_buffer_[7]) << 8)  |
+        (static_cast<uint32_t>(recv_buffer_[8]));
+
+    if (new_position + 500 < prev_server_position) {
+        if (decoder_) {
+            opus_decoder_ctl(decoder_, OPUS_RESET_STATE);
+        }
+    }
+
+    server_position_ms_.store(new_position);
 
     if (!first_packet_ && seq != expected_seq_) {
         Logger::print("[warning] sequence gap: expected " + std::to_string(expected_seq_) +
@@ -170,21 +212,23 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
     expected_seq_ = seq + 1;
     first_packet_ = false;
 
-    const unsigned char* opus_payload = recv_buffer_.data() + 8;
-    int opus_payload_size = static_cast<int>(bytes_received - 8);
+    const unsigned char* opus_payload = recv_buffer_.data() + 9;   // було +8
+    int opus_payload_size = static_cast<int>(bytes_received - 9);  // було -8
 
-    std::vector<int16_t> pcm_frame(SAMPLES_PER_FRAME * CHANNELS);
+    AudioFrame frame;
+    frame.pcm.resize(SAMPLES_PER_FRAME * CHANNELS);
+    frame.pts_ms = new_position;
+
     int decoded_samples = opus_decode(
         decoder_, opus_payload, opus_payload_size,
-        pcm_frame.data(), SAMPLES_PER_FRAME, 0);
+        frame.pcm.data(), SAMPLES_PER_FRAME, 0);
 
     if (decoded_samples < 0) {
         Logger::print(std::string("Opus decode error: ") + opus_strerror(decoded_samples));
-        start_receive();
         return;
     }
 
-    pcm_queue_.push(std::move(pcm_frame));
+    pcm_queue_.push(std::move(frame));
     packets_received_++;
 
     if (packets_received_ % 50 == 0) {
@@ -192,8 +236,11 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
                        " | underruns: " + std::to_string(underruns_.load()) +
                        " | in queue: " + std::to_string(pcm_queue_.size()));
     }
+}
 
-    start_receive();
+
+void UdpClient::handle_voice_packet(size_t bytes_received) {
+
 }
 
 int UdpClient::pa_callback_wrapper(const void* input, void* output,
@@ -216,38 +263,38 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
         prebuffering_ = false;
     }
 
-    constexpr uint32_t BUFFER_OFFSET_MS = PREBUFFER_FRAMES * FRAME_DURATION_MS; // 10 * 20 = 200ms
-
-    int32_t drift_ms = static_cast<int32_t>(server_position_ms_.load())
-                 - static_cast<int32_t>(playback_position_ms_.load())
-                 - static_cast<int32_t>(BUFFER_OFFSET_MS);
-
-    int32_t drift_frames = drift_ms / FRAME_DURATION_MS;
+    int32_t current_queue_size = static_cast<int32_t>(pcm_queue_.size());
+    int32_t drift_frames = current_queue_size - static_cast<int32_t>(PREBUFFER_FRAMES);
 
     if (drift_frames > 3) {
-        std::vector<int16_t> dummy;
+        // Черга переповнюється — непомітно пропускаємо 1 фрейм
+        AudioFrame dummy;
         pcm_queue_.pop(dummy);
-        playback_position_ms_.fetch_add(FRAME_DURATION_MS);
     } else if (drift_frames < -3) {
-        if (!last_frame_.empty() && last_frame_.size() == frame_count * CHANNELS) {  // додати перевірку розміру
+        // Черга спорожнюється — повторюємо останній фрейм для пригальмовування
+        if (!last_frame_.empty() && last_frame_.size() == frame_count * CHANNELS) {
             std::memcpy(out, last_frame_.data(), last_frame_.size() * sizeof(int16_t));
             return paContinue;
         }
     }
 
-    std::vector<int16_t> frame;
-    if (pcm_queue_.pop(frame) && frame.size() == frame_count * CHANNELS) {
-        std::memcpy(out, frame.data(), frame.size() * sizeof(int16_t));
-        last_frame_ = frame;
-        playback_position_ms_.fetch_add(FRAME_DURATION_MS);
+    AudioFrame frame;
+    if (pcm_queue_.pop(frame) && frame.pcm.size() == frame_count * CHANNELS) {
+        std::memcpy(out, frame.pcm.data(), frame.pcm.size() * sizeof(int16_t));
+        last_frame_ = frame.pcm;
+
+        // Позиція відтворення стає РІВНОЮ PTS кадру, який прямо зараз пішов у колонки!
+        playback_position_ms_.store(frame.pts_ms);
+
         consecutive_underruns_ = 0;
     } else {
+        // Якщо сталася втрата даних (underrun)
         std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));
         underruns_++;
         consecutive_underruns_++;
 
         if (consecutive_underruns_ >= 3) {
-            prebuffering_ = true;
+            prebuffering_ = true; // Запитати новий накопичувальний буфер
             consecutive_underruns_ = 0;
         }
     }
