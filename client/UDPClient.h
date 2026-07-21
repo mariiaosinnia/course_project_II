@@ -3,6 +3,8 @@
 #include <opus.h>
 #include <portaudio.h>
 #include <boost/asio.hpp>
+#include "../shared/AudioEncoder.h"
+#include "../shared/MusicStreamer.h"
 
 #include <string>
 #include <vector>
@@ -15,21 +17,21 @@ constexpr int SAMPLE_RATE = 48000;
 constexpr int CHANNELS = 2;
 constexpr int SAMPLES_PER_FRAME = SAMPLE_RATE * FRAME_DURATION_MS / 1000;
 
-class PcmQueue {
-public:
-    void push(std::vector<int16_t> frame);
-    bool pop(std::vector<int16_t>& out);
-    size_t size();
-
-private:
-    std::mutex mutex_;
-    std::deque<std::vector<int16_t>> queue_;
+struct AudioFrame {
+    std::vector<int16_t> pcm;
+    uint32_t pts_ms{0};
 };
 
-// UdpClient тепер не володіє власним io_context/потоком - він живе на
-// тому ж io_context, що й TCPClient, і використовує async_receive_from.
-// Це усуває другий "паралельний світ" потоків і дозволяє єдиний event loop
-// для всього мережевого коду клієнта.
+class PcmQueue {
+public:
+    void push(AudioFrame frame);
+    bool pop(AudioFrame& out);
+    size_t size();
+private:
+    std::deque<AudioFrame> queue_;
+    std::mutex mutex_;
+};
+
 class UdpClient : public std::enable_shared_from_this<UdpClient> {
 public:
     UdpClient(boost::asio::io_context& io_context,
@@ -40,6 +42,9 @@ public:
 
     bool start();
     void stop();
+    bool start_voice_capture();
+    void stop_voice_capture();
+    bool is_voice_capturing() const { return voice_capturing_; }
 
 private:
     static int pa_callback_wrapper(const void* input, void* output,
@@ -53,6 +58,8 @@ private:
     void send_registration();
     void start_receive();
     void handle_receive(const boost::system::error_code& ec, size_t bytes_received);
+    void handle_music_packet(size_t bytes_received);
+    void handle_voice_packet(size_t bytes_received);
 
     boost::asio::io_context& io_context_;
     boost::asio::ip::udp::socket socket_;
@@ -66,6 +73,21 @@ private:
     OpusDecoder* decoder_{nullptr};
     PaStream* stream_{nullptr};
 
+    OpusDecoder* voice_decoder_{nullptr};
+    PcmQueue voice_queue_;
+
+    static int voice_pa_callback_wrapper(const void* input, void* output,
+                                          unsigned long frame_count,
+                                          const PaStreamCallbackTimeInfo* timeInfo,
+                                          PaStreamCallbackFlags statusFlags,
+                                          void* userData);
+    void process_voice_capture(const void* input, unsigned long frame_count);
+
+    PaStream* voice_stream_ = nullptr;
+    std::unique_ptr<AudioEncoder> voice_encoder_;
+    std::atomic<bool> voice_capturing_{false};
+    uint32_t voice_seq_ = 0;
+
     std::atomic<bool> running_{false};
 
     std::vector<unsigned char> recv_buffer_;
@@ -75,7 +97,19 @@ private:
     PcmQueue pcm_queue_;
     std::atomic<uint64_t> packets_received_{0};
     std::atomic<uint64_t> underruns_{0};
+    int consecutive_underruns_ = 0;
+
+    std::atomic<uint32_t> server_position_ms_{0};
+    std::atomic<uint32_t> playback_position_ms_{0};
+
+    std::vector<int16_t> last_frame_;
 
     bool prebuffering_{true};
     static constexpr size_t PREBUFFER_FRAMES = 10;
+
+    static constexpr size_t PREBUFFER_FRAMES_VOICE = 3;
+    bool voice_prebuffering_ = true;
+
+    uint32_t expected_voice_seq_ = 0;
+    bool first_voice_packet_ = true;
 };

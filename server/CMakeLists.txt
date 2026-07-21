@@ -11,8 +11,8 @@ add_executable(server
     UdpAudioServer.cpp
     Mp3Decoder.cpp
     Resampler.cpp
-    AudioEncoder.cpp
-    MusicStreamer.cpp
+        ../shared/AudioEncoder.cpp
+        ../shared/MusicStreamer.cpp
     UdpSocket.cpp
     ../boost_throw_exception_compat.cpp
 )

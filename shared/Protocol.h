@@ -53,6 +53,13 @@ enum class PacketType : uint8_t {
     Error = 0x1F,
 };
 
+
+enum class UdpPacketType : uint8_t {
+    Music = 0x01,
+    Voice = 0x02,
+    Registration = 0xFF
+};
+
 enum class StatusCode : uint8_t {
     Success = 0x00,
     RoomNotFound = 0x01,
