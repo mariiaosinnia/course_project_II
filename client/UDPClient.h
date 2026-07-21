@@ -32,10 +32,6 @@ private:
     std::mutex mutex_;
 };
 
-// UdpClient тепер не володіє власним io_context/потоком - він живе на
-// тому ж io_context, що й TCPClient, і використовує async_receive_from.
-// Це усуває другий "паралельний світ" потоків і дозволяє єдиний event loop
-// для всього мережевого коду клієнта.
 class UdpClient : public std::enable_shared_from_this<UdpClient> {
 public:
     UdpClient(boost::asio::io_context& io_context,
@@ -110,4 +106,10 @@ private:
 
     bool prebuffering_{true};
     static constexpr size_t PREBUFFER_FRAMES = 10;
+
+    static constexpr size_t PREBUFFER_FRAMES_VOICE = 3;
+    bool voice_prebuffering_ = true;
+
+    uint32_t expected_voice_seq_ = 0;
+    bool first_voice_packet_ = true;
 };

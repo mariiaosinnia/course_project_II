@@ -50,7 +50,7 @@ bool UdpClient::start() {
     int voice_opus_error = 0;
     voice_decoder_ = opus_decoder_create(SAMPLE_RATE, CHANNELS, &voice_opus_error);
     if (voice_opus_error != OPUS_OK) {
-        Logger::print(std::string("Failed to create Opus decoder fro voice: ") + opus_strerror(opus_error));
+        Logger::print(std::string("Failed to create Opus decoder for voice: ") + opus_strerror(voice_opus_error));
         return false;
     }
 
@@ -240,7 +240,52 @@ void UdpClient::handle_music_packet(size_t bytes_received) {
 
 
 void UdpClient::handle_voice_packet(size_t bytes_received) {
+    if (bytes_received < 9) return;
 
+    uint32_t sender_id =
+        (static_cast<uint32_t>(recv_buffer_[1]) << 24) |
+        (static_cast<uint32_t>(recv_buffer_[2]) << 16) |
+        (static_cast<uint32_t>(recv_buffer_[3]) << 8)  |
+        (static_cast<uint32_t>(recv_buffer_[4]));
+
+    if (sender_id == client_id_) {
+        return;  // страховка: не програвати власний голос
+    }
+
+    uint32_t seq =
+        (static_cast<uint32_t>(recv_buffer_[5]) << 24) |
+        (static_cast<uint32_t>(recv_buffer_[6]) << 16) |
+        (static_cast<uint32_t>(recv_buffer_[7]) << 8)  |
+        (static_cast<uint32_t>(recv_buffer_[8]));
+
+    if (voice_queue_.size() == 0) {
+        first_voice_packet_ = true;
+    }
+
+    if (!first_voice_packet_ && seq != expected_voice_seq_) {
+        Logger::print("[warning] voice sequence gap: expected " +
+                       std::to_string(expected_voice_seq_) +
+                       ", got " + std::to_string(seq));
+    }
+    expected_voice_seq_ = seq + 1;
+    first_voice_packet_ = false;
+
+    const unsigned char* opus_payload = recv_buffer_.data() + 9;
+    int opus_payload_size = static_cast<int>(bytes_received - 9);
+
+    AudioFrame frame;
+    frame.pcm.resize(SAMPLES_PER_FRAME * CHANNELS);
+
+    int decoded_samples = opus_decode(
+        voice_decoder_, opus_payload, opus_payload_size,
+        frame.pcm.data(), SAMPLES_PER_FRAME, 0);
+
+    if (decoded_samples < 0) {
+        Logger::print(std::string("Voice Opus decode error: ") + opus_strerror(decoded_samples));
+        return;
+    }
+
+    voice_queue_.push(std::move(frame));
 }
 
 int UdpClient::pa_callback_wrapper(const void* input, void* output,
@@ -296,6 +341,26 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
         if (consecutive_underruns_ >= 3) {
             prebuffering_ = true; // Запитати новий накопичувальний буфер
             consecutive_underruns_ = 0;
+        }
+    }
+
+    if (voice_queue_.size() == 0) {
+        voice_prebuffering_ = true;
+    } else if (voice_prebuffering_) {
+        if (voice_queue_.size() < PREBUFFER_FRAMES_VOICE) {
+            return paContinue;
+        } else {
+            voice_prebuffering_ = false;
+        }
+    }
+
+    if (!voice_prebuffering_) {
+        AudioFrame voice_frame;
+        if (voice_queue_.pop(voice_frame) && voice_frame.pcm.size() == frame_count * CHANNELS) {
+            for (size_t i = 0; i < frame_count * CHANNELS; ++i) {
+                int32_t mixed = static_cast<int32_t>(out[i]) + static_cast<int32_t>(voice_frame.pcm[i]);
+                out[i] = static_cast<int16_t>(std::clamp(mixed, -32768, 32767));
+            }
         }
     }
 
