@@ -178,7 +178,7 @@ void UdpAudioServer::run() {
 }
 
 void UdpAudioServer::receiveLoop() {
-    std::vector<uint8_t> buffer(16);
+    std::vector<uint8_t> buffer(4000);
 
     while (running) {
         udp::endpoint sender;
@@ -186,15 +186,47 @@ void UdpAudioServer::receiveLoop() {
 
         if (bytes == 0) continue;
 
-        if (bytes == 5 && buffer[0] == 0xFF) {
-            uint32_t client_id =
-                (static_cast<uint32_t>(buffer[1]) << 24) |
-                (static_cast<uint32_t>(buffer[2]) << 16) |
-                (static_cast<uint32_t>(buffer[3]) << 8)  |
-                (static_cast<uint32_t>(buffer[4]));
+        UdpPacketType type = static_cast<UdpPacketType>(buffer[0]);
 
-            registerClient(client_id, sender);
+        switch (type) {
+            case UdpPacketType::Registration: {
+                if (bytes == 5) {
+                    uint32_t client_id =
+                        (static_cast<uint32_t>(buffer[1]) << 24) |
+                        (static_cast<uint32_t>(buffer[2]) << 16) |
+                        (static_cast<uint32_t>(buffer[3]) << 8)  |
+                        (static_cast<uint32_t>(buffer[4]));
+                    registerClient(client_id, sender);
+                }
+                break;
+            }
+            case UdpPacketType::Voice: {
+                handleVoicePacket(buffer, bytes, sender);
+                break;
+            }
+            default:
+                break;
         }
+    }
+}
+
+void UdpAudioServer::handleVoicePacket(const std::vector<uint8_t>& buffer, size_t bytes, const udp::endpoint& sender) {
+    if (bytes < 9) return;
+
+    uint32_t sender_client_id =
+        (static_cast<uint32_t>(buffer[1]) << 24) |
+        (static_cast<uint32_t>(buffer[2]) << 16) |
+        (static_cast<uint32_t>(buffer[3]) << 8)  |
+        (static_cast<uint32_t>(buffer[4]));
+
+    uint16_t room_id = room_manager_.get_room_id_for_user(sender_client_id);
+    if (room_id == 0) return;
+
+    std::vector<uint8_t> packet(buffer.begin(), buffer.begin() + bytes);
+
+    auto endpoints = room_manager_.get_udp_endpoints_except(room_id, sender_client_id);
+    for (const auto& endpoint : endpoints) {
+        udp_socket_.sendTo(packet, endpoint);
     }
 }
 

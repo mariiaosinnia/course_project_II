@@ -3,6 +3,8 @@
 #include <opus.h>
 #include <portaudio.h>
 #include <boost/asio.hpp>
+#include "../shared/AudioEncoder.h"
+#include "../shared/MusicStreamer.h"
 
 #include <string>
 #include <vector>
@@ -44,6 +46,9 @@ public:
 
     bool start();
     void stop();
+    bool start_voice_capture();
+    void stop_voice_capture();
+    bool is_voice_capturing() const { return voice_capturing_; }
 
 private:
     static int pa_callback_wrapper(const void* input, void* output,
@@ -74,6 +79,18 @@ private:
 
     OpusDecoder* voice_decoder_{nullptr};
     PcmQueue voice_queue_;
+
+    static int voice_pa_callback_wrapper(const void* input, void* output,
+                                          unsigned long frame_count,
+                                          const PaStreamCallbackTimeInfo* timeInfo,
+                                          PaStreamCallbackFlags statusFlags,
+                                          void* userData);
+    void process_voice_capture(const void* input, unsigned long frame_count);
+
+    PaStream* voice_stream_ = nullptr;
+    std::unique_ptr<AudioEncoder> voice_encoder_;
+    std::atomic<bool> voice_capturing_{false};
+    uint32_t voice_seq_ = 0;
 
     std::atomic<bool> running_{false};
 

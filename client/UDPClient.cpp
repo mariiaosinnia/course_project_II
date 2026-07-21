@@ -301,3 +301,70 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
 
     return paContinue;
 }
+
+bool UdpClient::start_voice_capture() {
+    if (voice_capturing_) return true;
+
+    voice_encoder_ = std::make_unique<AudioEncoder>(SAMPLE_RATE, CHANNELS);
+
+    PaError err = Pa_OpenDefaultStream(
+        &voice_stream_,
+        CHANNELS, 0,
+        paInt16, SAMPLE_RATE, SAMPLES_PER_FRAME,
+        &UdpClient::voice_pa_callback_wrapper, this);
+
+    if (err != paNoError) {
+        Logger::print(std::string("Failed to open voice input stream: ") + Pa_GetErrorText(err));
+        voice_stream_ = nullptr;
+        return false;
+    }
+
+    err = Pa_StartStream(voice_stream_);
+    if (err != paNoError) {
+        Logger::print(std::string("Failed to start voice input stream: ") + Pa_GetErrorText(err));
+        Pa_CloseStream(voice_stream_);
+        voice_stream_ = nullptr;
+        return false;
+    }
+
+    voice_seq_ = 0;
+    voice_capturing_ = true;
+    Logger::print("Voice capture started");
+    return true;
+}
+
+void UdpClient::stop_voice_capture() {
+    if (!voice_capturing_) return;
+    voice_capturing_ = false;
+
+    if (voice_stream_) {
+        Pa_StopStream(voice_stream_);
+        Pa_CloseStream(voice_stream_);
+        voice_stream_ = nullptr;
+    }
+    voice_encoder_.reset();
+    Logger::print("Voice capture stopped");
+}
+
+int UdpClient::voice_pa_callback_wrapper(const void* input, void* output,
+                                          unsigned long frame_count,
+                                          const PaStreamCallbackTimeInfo* timeInfo,
+                                          PaStreamCallbackFlags statusFlags,
+                                          void* userData) {
+    auto* client = static_cast<UdpClient*>(userData);
+    client->process_voice_capture(input, frame_count);
+    return paContinue;
+}
+
+void UdpClient::process_voice_capture(const void* input, unsigned long frame_count) {
+    if (!voice_capturing_ || !input) return;
+
+    const int16_t* in = static_cast<const int16_t*>(input);
+
+    auto opus_data = voice_encoder_->encodeFrame(in, static_cast<int>(frame_count));
+
+    auto packet = MusicStreamer::buildVoicePacket(client_id_, voice_seq_++, opus_data);
+
+    boost::system::error_code ec;
+    socket_.send_to(boost::asio::buffer(packet), server_endpoint_, 0, ec);
+}

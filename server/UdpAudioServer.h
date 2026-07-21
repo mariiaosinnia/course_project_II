@@ -10,9 +10,9 @@
 #include "Track.h"
 #include "Mp3Decoder.h"
 #include "Resampler.h"
-#include "AudioEncoder.h"
+#include "../shared/AudioEncoder.h"
 #include "UdpSocket.h"
-#include "MusicStreamer.h"
+#include "../shared/MusicStreamer.h"
 #include "RoomManager.h"
 
 struct PlaybackRoom {
@@ -46,6 +46,7 @@ private:
     void schedulerLoop();
     void loadDefaultTracks();
     std::shared_ptr<Track> prepareTrack(const std::string& file_path);
+    void handleVoicePacket(const std::vector<uint8_t>& buffer, size_t bytes, const udp::endpoint& sender);
 
     RoomManager&    room_manager_;
     UdpSocket       udp_socket_;
