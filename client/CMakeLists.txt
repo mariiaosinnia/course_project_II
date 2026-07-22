@@ -6,6 +6,8 @@ add_executable(client
     ClientApp.cpp
     Logger.cpp
     UDPClient.cpp
+    ../shared/AudioEncoder.cpp
+    ../shared/MusicStreamer.cpp
     ../boost_throw_exception_compat.cpp
     AppUi.h
     AppUi.cpp

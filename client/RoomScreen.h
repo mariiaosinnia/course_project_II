@@ -11,6 +11,12 @@
 struct UserEntry {
     uint32_t client_id;
     std::string name;
+    bool speaking = false;
+};
+
+struct TrackEntry {
+    uint16_t track_id;
+    std::string filename;
 };
 
 // Room view — екран кімнати в стилі:
@@ -38,7 +44,9 @@ public:
         ftxui::ScreenInteractive& screen,
         std::function<void()> on_leave,
         std::function<void()> on_mute_toggle,
-        std::function<void(const std::string& path)> on_upload
+        std::function<void(const std::string& path)> on_upload,
+        std::function<void(uint16_t track_id)> on_track_select,
+        std::function<void()> on_tracks_refresh
     );
 
     ftxui::Component component();
@@ -49,6 +57,8 @@ public:
     void set_users(std::vector<UserEntry> users);
     void add_user(UserEntry user);
     void remove_user(uint32_t client_id);
+    void set_user_speaking(uint32_t client_id, bool speaking);
+    void set_tracks(std::vector<TrackEntry> tracks);
     void set_ping(int ms, float loss_percent);
     void set_visualizer_data(std::vector<float> bars);  // 0.0–1.0 per bar
     void set_muted(bool muted);
@@ -60,16 +70,20 @@ private:
     std::function<void()> on_leave_;
     std::function<void()> on_mute_toggle_;
     std::function<void(const std::string&)> on_upload_;
+    std::function<void(uint16_t)> on_track_select_;
+    std::function<void()> on_tracks_refresh_;
 
     mutable std::mutex data_mutex_;
 
     std::string room_name_ = "room";
     std::string track_name_ = "—";
     std::vector<UserEntry> users_;
+    std::vector<TrackEntry> tracks_;
+    int selected_track_ = 0;
     int ping_ms_ = 0;
     float loss_ = 0.0f;
     std::vector<float> visualizer_bars_;
-    bool muted_ = false;
+    bool muted_ = true;
     int pomodoro_secs_ = -1;
     std::string upload_path_;
     std::string upload_status_;
@@ -80,10 +94,11 @@ private:
     void build();
 
     // Рендер підсекцій (щоб Renderer не розростався)
-    ftxui::Element render_now_playing() const;
-    ftxui::Element render_users() const;
-    ftxui::Element render_visualizer() const;
+    ftxui::Element render_now_playing(const std::string& track_name) const;
+    ftxui::Element render_users(const std::vector<UserEntry>& users) const;
+    ftxui::Element render_visualizer(const std::vector<float>& bars) const;
     ftxui::Element render_upload(const std::string& status, bool is_error) const;
-    ftxui::Element render_pomodoro() const;
-    ftxui::Element render_footer() const;
+    ftxui::Element render_tracks(const std::vector<TrackEntry>& tracks, int selected_track) const;
+    ftxui::Element render_pomodoro(int seconds_remaining) const;
+    ftxui::Element render_footer(int ping_ms, float loss, bool muted) const;
 };

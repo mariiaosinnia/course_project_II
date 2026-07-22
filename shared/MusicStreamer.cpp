@@ -1,4 +1,4 @@
-#include "../server/MusicStreamer.h"
+#include "MusicStreamer.h"
 #include "Protocol.h"
 #include <cstring>
 

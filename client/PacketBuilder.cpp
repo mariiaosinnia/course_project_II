@@ -44,6 +44,28 @@ std::vector<uint8_t> PacketBuilder::list_rooms()
     return build(PacketType::ListRooms);
 }
 
+std::vector<uint8_t> PacketBuilder::list_tracks()
+{
+    return build(PacketType::ListTracks);
+}
+
+std::vector<uint8_t> PacketBuilder::track_select(uint16_t track_id)
+{
+    TrackSelectBody body{};
+    body.track_id = boost::endian::native_to_big(track_id);
+    return build(PacketType::TrackSelect, body);
+}
+
+std::vector<uint8_t> PacketBuilder::voice_start()
+{
+    return build(PacketType::VoiceStart);
+}
+
+std::vector<uint8_t> PacketBuilder::voice_stop()
+{
+    return build(PacketType::VoiceStop);
+}
+
 std::vector<uint8_t> PacketBuilder::ping()
 {
     return build(PacketType::Ping);

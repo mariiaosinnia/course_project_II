@@ -1,5 +1,7 @@
-#include "AppUI.h"
+#include "AppUi.h"
 #include "ClientApp.h"
+
+#include <mutex>
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/dom/elements.hpp>
@@ -53,10 +55,17 @@ AppUI::AppUI(ClientApp& app)
             app_.send_leave_room();
         },
         [this] {
-            // TODO: mute/unmute через VoiceStart/VoiceStop
+            bool voice_active = app_.toggle_voice();
+            room_->set_muted(!voice_active);
         },
         [this](const std::string& path) {
             app_.send_upload_track(path);
+        },
+        [this](uint16_t track_id) {
+            app_.send_track_select(track_id);
+        },
+        [this] {
+            app_.send_list_tracks();
         }
     );
 
@@ -84,6 +93,8 @@ AppUI::AppUI(ClientApp& app)
     app_.set_on_room_joined([this](uint16_t room_id) {
         room_->set_room_name("room #" + std::to_string(room_id));
         room_->set_track_name("track #" + std::to_string(room_id));
+        room_->set_users({});
+        room_->set_muted(!app_.is_voice_active());
         navigate_to(Screen::Room);
     });
 
@@ -112,12 +123,35 @@ AppUI::AppUI(ClientApp& app)
         room_->remove_user(id);
     });
 
+    app_.set_on_voice_started([this](uint32_t id) {
+        room_->set_user_speaking(id, true);
+    });
+
+    app_.set_on_voice_stopped([this](uint32_t id) {
+        room_->set_user_speaking(id, false);
+    });
+
     app_.set_on_upload_status([this](const std::string& status, bool is_error) {
         room_->set_upload_status(status, is_error);
     });
 
     app_.set_on_track_added([this](uint16_t room_id, uint16_t track_id, const std::string& filename) {
-        room_->set_track_name(filename + " (#" + std::to_string(track_id) + ")");
+        std::string display = filename.empty()
+            ? "track #" + std::to_string(track_id)
+            : filename + " (#" + std::to_string(track_id) + ")";
+        room_->set_track_name(display);
+    });
+
+    app_.set_on_track_list_updated([this] {
+        auto& state = app_.state();
+        std::vector<TrackEntry> entries;
+        {
+            std::lock_guard<std::mutex> lock(state.track_list_mutex);
+            for (const auto& track : state.track_list_cache) {
+                entries.push_back({track.track_id, track.filename});
+            }
+        }
+        room_->set_tracks(std::move(entries));
     });
 }
 

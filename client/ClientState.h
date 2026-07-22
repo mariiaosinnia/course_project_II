@@ -15,4 +15,6 @@ struct ClientState {
     std::atomic<bool> upload_in_progress{false};
     std::mutex room_list_mutex;
     std::vector<RoomListEntry> room_list_cache;
+    std::mutex track_list_mutex;
+    std::vector<TrackListEntry> track_list_cache;
 };

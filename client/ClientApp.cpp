@@ -126,6 +126,60 @@ void ClientApp::send_list_rooms()
     tcp_client_->send(PacketBuilder::list_rooms());
 }
 
+void ClientApp::send_list_tracks()
+{
+    tcp_client_->send(PacketBuilder::list_tracks());
+}
+
+void ClientApp::send_track_select(uint16_t track_id)
+{
+    tcp_client_->send(PacketBuilder::track_select(track_id));
+}
+
+bool ClientApp::send_voice_start()
+{
+    if (state_.current_room_id.load() == 0 || !udp_client_) {
+        Logger::print("cannot start voice: join a room first");
+        return false;
+    }
+
+    if (udp_client_->is_voice_capturing()) {
+        return true;
+    }
+
+    if (!udp_client_->start_voice_capture()) {
+        Logger::print("failed to start voice capture");
+        return false;
+    }
+
+    tcp_client_->send(PacketBuilder::voice_start());
+    return true;
+}
+
+void ClientApp::send_voice_stop()
+{
+    if (!udp_client_ || !udp_client_->is_voice_capturing()) {
+        return;
+    }
+
+    udp_client_->stop_voice_capture();
+    tcp_client_->send(PacketBuilder::voice_stop());
+}
+
+bool ClientApp::toggle_voice()
+{
+    if (is_voice_active()) {
+        send_voice_stop();
+        return false;
+    }
+    return send_voice_start();
+}
+
+bool ClientApp::is_voice_active() const
+{
+    return udp_client_ && udp_client_->is_voice_capturing();
+}
+
 void ClientApp::send_ping()
 {
     tcp_client_->send(PacketBuilder::ping());
@@ -247,6 +301,9 @@ void ClientApp::on_packet(PacketType type, const std::vector<uint8_t>& body)
         case PacketType::UserJoined:   on_user_joined(body);  break;
         case PacketType::UserLeft:     on_user_left(body);    break;
         case PacketType::TrackAdded:   on_track_added(body);  break;
+        case PacketType::TrackList:    on_track_list(body);   break;
+        case PacketType::VoiceStarted: on_voice_started(body); break;
+        case PacketType::VoiceStopped: on_voice_stopped(body); break;
         case PacketType::Pong:         on_pong();             break;
         case PacketType::Error:        on_error(body);        break;
         default:                       on_unhandled(type);    break;
@@ -259,6 +316,7 @@ void ClientApp::on_disconnect()
     state_.current_room_id = 0;
     state_.upload_in_progress = false;
     if (udp_client_) {
+        udp_client_->stop_voice_capture();
         udp_client_->stop();
         udp_client_.reset();
     }
@@ -314,13 +372,15 @@ void ClientApp::on_room_joined(const std::vector<uint8_t>& body)
 
     start_udp(parsed->header.udp_port);
 
+    if (on_room_joined_cb_) on_room_joined_cb_(parsed->header.room_id);
+
     for (const auto& user : parsed->users) {
         if (on_user_joined_cb_) {
             on_user_joined_cb_(user.client_id, std::string(user.username));
         }
     }
 
-    if (on_room_joined_cb_) on_room_joined_cb_(parsed->header.room_id);
+    send_list_tracks();
 }
 
 void ClientApp::start_udp(uint16_t udp_port)
@@ -353,8 +413,13 @@ void ClientApp::on_room_left()
     state_.current_room_id = 0;
     state_.upload_in_progress = false;
     if (udp_client_) {
+        udp_client_->stop_voice_capture();
         udp_client_->stop();
         udp_client_.reset();
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_.track_list_mutex);
+        state_.track_list_cache.clear();
     }
     Logger::print("RoomLeft");
     set_upload_status("", false);
@@ -437,6 +502,55 @@ void ClientApp::on_track_added(const std::vector<uint8_t>& body)
     if (on_track_added_cb_) {
         on_track_added_cb_(parsed->room_id, parsed->track_id, filename);
     }
+
+    send_list_tracks();
+}
+
+void ClientApp::on_track_list(const std::vector<uint8_t>& body)
+{
+    auto parsed = PacketParser::parse_track_list(body);
+    if (!parsed) {
+        Logger::print("bad TrackList body");
+        return;
+    }
+
+    std::string msg = "TrackList (" + std::to_string(parsed->tracks.size()) + "):";
+    for (const auto& track : parsed->tracks) {
+        msg += "\n  track_id=" + std::to_string(track.track_id) +
+               " filename=" + track.filename;
+    }
+    Logger::print(msg);
+
+    {
+        std::lock_guard<std::mutex> lock(state_.track_list_mutex);
+        state_.track_list_cache = parsed->tracks;
+    }
+
+    if (on_track_list_updated_cb_) on_track_list_updated_cb_();
+}
+
+void ClientApp::on_voice_started(const std::vector<uint8_t>& body)
+{
+    auto parsed = PacketParser::parse_voice_started(body);
+    if (!parsed) {
+        Logger::print("bad VoiceStarted body");
+        return;
+    }
+
+    Logger::print("VoiceStarted: id=" + std::to_string(parsed->client_id));
+    if (on_voice_started_cb_) on_voice_started_cb_(parsed->client_id);
+}
+
+void ClientApp::on_voice_stopped(const std::vector<uint8_t>& body)
+{
+    auto parsed = PacketParser::parse_voice_stopped(body);
+    if (!parsed) {
+        Logger::print("bad VoiceStopped body");
+        return;
+    }
+
+    Logger::print("VoiceStopped: id=" + std::to_string(parsed->client_id));
+    if (on_voice_stopped_cb_) on_voice_stopped_cb_(parsed->client_id);
 }
 
 void ClientApp::on_pong()

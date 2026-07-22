@@ -18,6 +18,10 @@ public:
     static std::vector<uint8_t> join_room(uint16_t room_id);
     static std::vector<uint8_t> leave_room();
     static std::vector<uint8_t> list_rooms();
+    static std::vector<uint8_t> list_tracks();
+    static std::vector<uint8_t> track_select(uint16_t track_id);
+    static std::vector<uint8_t> voice_start();
+    static std::vector<uint8_t> voice_stop();
     static std::vector<uint8_t> ping();
     static std::vector<uint8_t> upload_track_begin(
         uint16_t room_id,

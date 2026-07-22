@@ -72,6 +72,32 @@ std::optional<TrackAddedBody> PacketParser::parse_track_added(const std::vector<
     return result;
 }
 
+std::optional<VoiceStartedBody> PacketParser::parse_voice_started(const std::vector<uint8_t>& body)
+{
+    if (body.size() < sizeof(VoiceStartedBody)) {
+        return std::nullopt;
+    }
+
+    VoiceStartedBody result;
+    std::memcpy(&result, body.data(), sizeof(result));
+    result.client_id = boost::endian::big_to_native(result.client_id);
+
+    return result;
+}
+
+std::optional<VoiceStoppedBody> PacketParser::parse_voice_stopped(const std::vector<uint8_t>& body)
+{
+    if (body.size() < sizeof(VoiceStoppedBody)) {
+        return std::nullopt;
+    }
+
+    VoiceStoppedBody result;
+    std::memcpy(&result, body.data(), sizeof(result));
+    result.client_id = boost::endian::big_to_native(result.client_id);
+
+    return result;
+}
+
 std::optional<ErrorBody> PacketParser::parse_error(const std::vector<uint8_t>& body)
 {
     if (body.size() < sizeof(ErrorBody)) {
@@ -80,6 +106,36 @@ std::optional<ErrorBody> PacketParser::parse_error(const std::vector<uint8_t>& b
 
     ErrorBody result;
     std::memcpy(&result, body.data(), sizeof(result));
+
+    return result;
+}
+
+std::optional<PacketParser::TrackListResult> PacketParser::parse_track_list(
+    const std::vector<uint8_t>& body)
+{
+    if (body.size() < sizeof(TrackListHeader)) {
+        return std::nullopt;
+    }
+
+    TrackListHeader header;
+    std::memcpy(&header, body.data(), sizeof(TrackListHeader));
+
+    const size_t expected_size =
+        sizeof(TrackListHeader) + header.track_count * sizeof(TrackListEntry);
+    if (body.size() < expected_size) {
+        return std::nullopt;
+    }
+
+    TrackListResult result;
+    const uint8_t* cursor = body.data() + sizeof(TrackListHeader);
+    for (uint8_t i = 0; i < header.track_count; ++i) {
+        TrackListEntry entry;
+        std::memcpy(&entry, cursor, sizeof(TrackListEntry));
+        entry.track_id = boost::endian::big_to_native(entry.track_id);
+        entry.filename[sizeof(entry.filename) - 1] = '\0';
+        result.tracks.push_back(entry);
+        cursor += sizeof(TrackListEntry);
+    }
 
     return result;
 }

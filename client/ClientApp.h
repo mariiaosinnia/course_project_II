@@ -24,6 +24,12 @@ public:
     void send_join_room(uint16_t room_id);
     void send_leave_room();
     void send_list_rooms();
+    void send_list_tracks();
+    void send_track_select(uint16_t track_id);
+    bool send_voice_start();
+    void send_voice_stop();
+    bool toggle_voice();
+    bool is_voice_active() const;
     void send_ping();
     void send_upload_track(const std::string& path);
 
@@ -39,6 +45,9 @@ public:
     void set_on_user_joined(std::function<void(uint32_t, const std::string&)> cb) { on_user_joined_cb_ = std::move(cb); }
     void set_on_user_left(std::function<void(uint32_t)> cb) { on_user_left_cb_ = std::move(cb); }
     void set_on_track_added(std::function<void(uint16_t, uint16_t, const std::string&)> cb) { on_track_added_cb_ = std::move(cb); }
+    void set_on_track_list_updated(std::function<void()> cb) { on_track_list_updated_cb_ = std::move(cb); }
+    void set_on_voice_started(std::function<void(uint32_t)> cb) { on_voice_started_cb_ = std::move(cb); }
+    void set_on_voice_stopped(std::function<void(uint32_t)> cb) { on_voice_stopped_cb_ = std::move(cb); }
     void set_on_upload_status(std::function<void(const std::string&, bool)> cb) { on_upload_status_cb_ = std::move(cb); }
 
 private:
@@ -61,6 +70,9 @@ private:
     void on_user_joined(const std::vector<uint8_t>& body);
     void on_user_left(const std::vector<uint8_t>& body);
     void on_track_added(const std::vector<uint8_t>& body);
+    void on_track_list(const std::vector<uint8_t>& body);
+    void on_voice_started(const std::vector<uint8_t>& body);
+    void on_voice_stopped(const std::vector<uint8_t>& body);
     void on_pong();
     void on_error(const std::vector<uint8_t>& body);
     void on_unhandled(PacketType type);
@@ -84,5 +96,8 @@ private:
     std::function<void(uint32_t, const std::string&)> on_user_joined_cb_;
     std::function<void(uint32_t)> on_user_left_cb_;
     std::function<void(uint16_t, uint16_t, const std::string&)> on_track_added_cb_;
+    std::function<void()> on_track_list_updated_cb_;
+    std::function<void(uint32_t)> on_voice_started_cb_;
+    std::function<void(uint32_t)> on_voice_stopped_cb_;
     std::function<void(const std::string&, bool)> on_upload_status_cb_;
 };

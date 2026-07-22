@@ -56,3 +56,6 @@ install/
 Thumbs.db
 CMakePresets.json
 cmake-build-debug/
+
+
+uploads/
