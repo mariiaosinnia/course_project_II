@@ -55,8 +55,7 @@ AppUI::AppUI(ClientApp& app)
             app_.send_leave_room();
         },
         [this] {
-            bool voice_active = app_.toggle_voice();
-            room_->set_muted(!voice_active);
+            toggle_room_voice();
         },
         [this](const std::string& path) {
             app_.send_upload_track(path);
@@ -163,6 +162,20 @@ void AppUI::navigate_to(Screen s)
     screen_.PostEvent(Event::Custom);
 }
 
+void AppUI::toggle_room_voice()
+{
+    bool was_voice_active = app_.is_voice_active();
+    bool voice_active = app_.toggle_voice();
+    room_->set_muted(!voice_active);
+    if (!was_voice_active && !voice_active) {
+        room_->set_upload_status("microphone unavailable; check client.log", true);
+    } else if (voice_active) {
+        room_->set_upload_status("speaking", false);
+    } else {
+        room_->set_upload_status("", false);
+    }
+}
+
 void AppUI::run()
 {
     // Головний Renderer: показує той екран, який зараз активний.
@@ -180,6 +193,11 @@ void AppUI::run()
 
     // Пробрасуємо події в активний Component (для Tab, стрілок тощо)
     auto root_with_events = CatchEvent(root, [this](Event event) {
+        if (current_ == Screen::Room && event == Event::F2) {
+            toggle_room_voice();
+            return true;
+        }
+
         switch (current_) {
             case Screen::Login: return login_->component()->OnEvent(event);
             case Screen::Lobby: return lobby_->component()->OnEvent(event);

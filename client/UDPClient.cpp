@@ -1,5 +1,6 @@
 #include "UDPClient.h"
 #include "Logger.h"
+#include <algorithm>
 #include <cstring>
 
 using boost::asio::ip::udp;
@@ -48,7 +49,7 @@ bool UdpClient::start() {
     }
 
     int voice_opus_error = 0;
-    voice_decoder_ = opus_decoder_create(SAMPLE_RATE, CHANNELS, &voice_opus_error);
+    voice_decoder_ = opus_decoder_create(SAMPLE_RATE, VOICE_CHANNELS, &voice_opus_error);
     if (voice_opus_error != OPUS_OK) {
         Logger::print(std::string("Failed to create Opus decoder for voice: ") + opus_strerror(voice_opus_error));
         return false;
@@ -274,7 +275,7 @@ void  UdpClient::handle_voice_packet(size_t bytes_received) {
     int opus_payload_size = static_cast<int>(bytes_received - 9);
 
     AudioFrame frame;
-    frame.pcm.resize(SAMPLES_PER_FRAME * CHANNELS);
+    frame.pcm.resize(SAMPLES_PER_FRAME * VOICE_CHANNELS);
 
     int decoded_samples = opus_decode(
         voice_decoder_, opus_payload, opus_payload_size,
@@ -299,48 +300,43 @@ int UdpClient::pa_callback_wrapper(const void* input, void* output,
 
 int UdpClient::process_audio(void* output, unsigned long frame_count) {
     int16_t* out = static_cast<int16_t*>(output);
+    std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));
 
     if (prebuffering_) {
-        if (pcm_queue_.size() < PREBUFFER_FRAMES) {
-            std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));
-            return paContinue;
-        }
-        prebuffering_ = false;
-    }
-
-    int32_t current_queue_size = static_cast<int32_t>(pcm_queue_.size());
-    int32_t drift_frames = current_queue_size - static_cast<int32_t>(PREBUFFER_FRAMES);
-
-    if (drift_frames > 3) {
-        // Черга переповнюється — непомітно пропускаємо 1 фрейм
-        AudioFrame dummy;
-        pcm_queue_.pop(dummy);
-    } else if (drift_frames < -3) {
-        // Черга спорожнюється — повторюємо останній фрейм для пригальмовування
-        if (!last_frame_.empty() && last_frame_.size() == frame_count * CHANNELS) {
-            std::memcpy(out, last_frame_.data(), last_frame_.size() * sizeof(int16_t));
-            return paContinue;
+        if (pcm_queue_.size() >= PREBUFFER_FRAMES) {
+            prebuffering_ = false;
         }
     }
 
-    AudioFrame frame;
-    if (pcm_queue_.pop(frame) && frame.pcm.size() == frame_count * CHANNELS) {
-        std::memcpy(out, frame.pcm.data(), frame.pcm.size() * sizeof(int16_t));
-        last_frame_ = frame.pcm;
+    if (!prebuffering_) {
+        int32_t current_queue_size = static_cast<int32_t>(pcm_queue_.size());
+        int32_t drift_frames = current_queue_size - static_cast<int32_t>(PREBUFFER_FRAMES);
 
-        // Позиція відтворення стає РІВНОЮ PTS кадру, який прямо зараз пішов у колонки!
-        playback_position_ms_.store(frame.pts_ms);
+        if (drift_frames > 3) {
+            AudioFrame dummy;
+            pcm_queue_.pop(dummy);
+        } else if (drift_frames < -3) {
+            if (!last_frame_.empty() && last_frame_.size() == frame_count * CHANNELS) {
+                std::memcpy(out, last_frame_.data(), last_frame_.size() * sizeof(int16_t));
+            }
+        }
 
-        consecutive_underruns_ = 0;
-    } else {
-        // Якщо сталася втрата даних (underrun)
-        std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));
-        underruns_++;
-        consecutive_underruns_++;
+        AudioFrame frame;
+        if (pcm_queue_.pop(frame) && frame.pcm.size() == frame_count * CHANNELS) {
+            std::memcpy(out, frame.pcm.data(), frame.pcm.size() * sizeof(int16_t));
+            last_frame_ = frame.pcm;
 
-        if (consecutive_underruns_ >= 3) {
-            prebuffering_ = true; // Запитати новий накопичувальний буфер
+            playback_position_ms_.store(frame.pts_ms);
+
             consecutive_underruns_ = 0;
+        } else {
+            underruns_++;
+            consecutive_underruns_++;
+
+            if (consecutive_underruns_ >= 3) {
+                prebuffering_ = true;
+                consecutive_underruns_ = 0;
+            }
         }
     }
 
@@ -356,10 +352,21 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
 
     if (!voice_prebuffering_) {
         AudioFrame voice_frame;
-        if (voice_queue_.pop(voice_frame) && voice_frame.pcm.size() == frame_count * CHANNELS) {
-            for (size_t i = 0; i < frame_count * CHANNELS; ++i) {
-                int32_t mixed = static_cast<int32_t>(out[i]) + static_cast<int32_t>(voice_frame.pcm[i]);
-                out[i] = static_cast<int16_t>(std::clamp(mixed, -32768, 32767));
+        if (voice_queue_.pop(voice_frame)) {
+            if (voice_frame.pcm.size() == frame_count * CHANNELS) {
+                for (size_t i = 0; i < frame_count * CHANNELS; ++i) {
+                    int32_t mixed = static_cast<int32_t>(out[i]) + static_cast<int32_t>(voice_frame.pcm[i]);
+                    out[i] = static_cast<int16_t>(std::clamp(mixed, -32768, 32767));
+                }
+            } else if (voice_frame.pcm.size() == frame_count * VOICE_CHANNELS) {
+                for (size_t i = 0; i < frame_count; ++i) {
+                    int16_t sample = voice_frame.pcm[i];
+                    for (size_t channel = 0; channel < CHANNELS; ++channel) {
+                        size_t out_index = i * CHANNELS + channel;
+                        int32_t mixed = static_cast<int32_t>(out[out_index]) + static_cast<int32_t>(sample);
+                        out[out_index] = static_cast<int16_t>(std::clamp(mixed, -32768, 32767));
+                    }
+                }
             }
         }
     }
@@ -370,11 +377,11 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
 bool UdpClient::start_voice_capture() {
     if (voice_capturing_) return true;
 
-    voice_encoder_ = std::make_unique<AudioEncoder>(SAMPLE_RATE, CHANNELS);
+    voice_encoder_ = std::make_unique<AudioEncoder>(SAMPLE_RATE, VOICE_CHANNELS);
 
     PaError err = Pa_OpenDefaultStream(
         &voice_stream_,
-        CHANNELS, 0,
+        VOICE_CHANNELS, 0,
         paInt16, SAMPLE_RATE, SAMPLES_PER_FRAME,
         &UdpClient::voice_pa_callback_wrapper, this);
 
@@ -432,4 +439,7 @@ void UdpClient::process_voice_capture(const void* input, unsigned long frame_cou
 
     boost::system::error_code ec;
     socket_.send_to(boost::asio::buffer(packet), server_endpoint_, 0, ec);
+    if (ec) {
+        Logger::print("voice UDP send error: " + ec.message());
+    }
 }

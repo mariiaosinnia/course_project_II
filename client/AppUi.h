@@ -39,6 +39,7 @@ private:
     enum class Screen { Login, Lobby, Room };
 
     void navigate_to(Screen s);
+    void toggle_room_voice();
 
     ClientApp& app_;
     ftxui::ScreenInteractive screen_;

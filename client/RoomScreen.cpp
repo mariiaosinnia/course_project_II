@@ -388,8 +388,8 @@ void RoomScreen::build()
         }) | border;
     });
 
-    // 'm' — mute/unmute, 'q' — leave. When the upload input is focused,
-    // printable characters must go to the input instead of global shortcuts.
+    // Printable characters go to the upload input while it is focused.
+    // F2 is handled by AppUI as the talk shortcut.
     component_ = CatchEvent(component_, [this, input_upload](Event event) {
         if (input_upload->Focused() && event.is_character()) {
             return false;
@@ -427,10 +427,6 @@ void RoomScreen::build()
         }
         if (event == Event::Character('r')) {
             if (on_tracks_refresh_) on_tracks_refresh_();
-            return true;
-        }
-        if (event == Event::Character('m')) {
-            if (on_mute_toggle_) on_mute_toggle_();
             return true;
         }
         if (event == Event::Character('q')) {

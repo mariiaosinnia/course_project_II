@@ -42,6 +42,8 @@ public:
   void stopRoomStreaming(uint16_t room_id);
 
   void registerClient(uint32_t client_id, const udp::endpoint &endpoint);
+  void onVoiceStart(uint32_t client_id, uint16_t room_id);
+  void onVoiceStop(uint32_t client_id, uint16_t room_id);
 
   void run();
   std::vector<TrackListEntry> getTrackList() const;
