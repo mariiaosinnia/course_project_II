@@ -1,5 +1,7 @@
 #include "Logger.h"
 
+#include <fstream>
+
 std::mutex& Logger::mutex()
 {
     static std::mutex m;
@@ -9,5 +11,6 @@ std::mutex& Logger::mutex()
 void Logger::print(const std::string& msg)
 {
     std::lock_guard<std::mutex> lock(mutex());
-    std::cout << msg << "\n";
+    std::ofstream log("client.log", std::ios::app);
+    log << msg << "\n";
 }

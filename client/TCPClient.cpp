@@ -1,7 +1,6 @@
-#include <iostream>
-
 #include <boost/endian/conversion.hpp>
 
+#include "Logger.h"
 #include "TCPClient.h"
 
 std::shared_ptr<TCPClient> TCPClient::create(boost::asio::io_context& io_context)
@@ -37,7 +36,7 @@ void TCPClient::connect(const std::string& host, uint16_t port,
                 on_connected(true);
             }
             else {
-                std::cerr << "connect error: " << ec.message() << "\n";
+                Logger::print("connect error: " + ec.message());
                 on_connected(false);
             }
         });
@@ -106,7 +105,7 @@ void TCPClient::write_next()
         boost::asio::buffer(*buffer),
         [self = shared_from_this(), buffer](boost::system::error_code ec, std::size_t) {
             if (ec) {
-                std::cerr << "send error: " << ec.message() << "\n";
+                Logger::print("send error: " + ec.message());
                 self->on_disconnect();
                 return;
             }

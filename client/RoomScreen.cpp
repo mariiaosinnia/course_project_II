@@ -251,8 +251,8 @@ Element RoomScreen::render_footer(int ping_ms, float loss, bool muted) const
     return hbox({
         text(oss.str()) | color(Color::GrayDark),
         filler(),
-        text(muted_ ? "  [ 🔇 ]  " : "  [ 🔊 ]  ")
-            | color(muted_ ? Color::Red : Color::GrayDark),
+        text(muted ? "  mic off  " : "  speaking  ")
+            | color(muted ? Color::Red : Color::Cyan),
     });
 }
 
@@ -264,7 +264,7 @@ void RoomScreen::build()
         if (on_leave_) on_leave_();
     });
 
-    auto btn_mute = Button("mic", [this] {
+    auto btn_mute = Button("talk", [this] {
         if (on_mute_toggle_) on_mute_toggle_();
     });
 
@@ -335,6 +335,8 @@ void RoomScreen::build()
         // Header
         auto header = hbox({
             container->ChildAt(0)->ChildAt(0)->Render(),
+            text(" "),
+            container->ChildAt(0)->ChildAt(1)->Render(),
             text("  " + room_name) | bold | color(Color::Cyan),
             filler(),
             text("● live") | color(Color::Green),
