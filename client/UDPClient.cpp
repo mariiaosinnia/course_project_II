@@ -239,7 +239,7 @@ void UdpClient::handle_music_packet(size_t bytes_received) {
 }
 
 
-void UdpClient::handle_voice_packet(size_t bytes_received) {
+void  UdpClient::handle_voice_packet(size_t bytes_received) {
     if (bytes_received < 9) return;
 
     uint32_t sender_id =
@@ -258,7 +258,7 @@ void UdpClient::handle_voice_packet(size_t bytes_received) {
         (static_cast<uint32_t>(recv_buffer_[7]) << 8)  |
         (static_cast<uint32_t>(recv_buffer_[8]));
 
-    if (voice_queue_.size() == 0) {
+    if (voice_queue_.size() == 0 || seq == 0) {
         first_voice_packet_ = true;
     }
 
