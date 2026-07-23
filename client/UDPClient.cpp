@@ -382,6 +382,24 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
         }
     }
 
+    if (on_visualizer_data_) {
+        std::vector<float> bars(VISUALIZER_BARS, 0.0f);
+        size_t samples_per_bar = (frame_count * CHANNELS) / VISUALIZER_BARS;
+        if (samples_per_bar > 0) {
+            for (size_t b = 0; b < VISUALIZER_BARS; ++b) {
+                double sum_sq = 0;
+                size_t start = b * samples_per_bar;
+                size_t end = std::min(start + samples_per_bar, frame_count * CHANNELS);
+                for (size_t i = start; i < end; ++i) {
+                    sum_sq += static_cast<double>(out[i]) * out[i];
+                }
+                double rms = std::sqrt(sum_sq / (end - start));
+                bars[b] = static_cast<float>(std::clamp(rms / 8000.0, 0.0, 1.0));
+            }
+        }
+        on_visualizer_data_(bars);
+    }
+
     return paContinue;
 }
 

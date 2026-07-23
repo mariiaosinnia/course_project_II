@@ -78,6 +78,13 @@ private:
     OpusDecoder* voice_decoder_{nullptr};
     PcmQueue voice_queue_;
 
+    static constexpr size_t VISUALIZER_BARS = 25;
+    std::function<void(const std::vector<float>&)> on_visualizer_data_;
+
+    void set_visualizer_callback(std::function<void(std::vector<float>)> cb) {
+        on_visualizer_data_ = std::move(cb);
+    }
+
     static int voice_pa_callback_wrapper(const void* input, void* output,
                                           unsigned long frame_count,
                                           const PaStreamCallbackTimeInfo* timeInfo,
