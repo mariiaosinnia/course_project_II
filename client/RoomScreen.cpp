@@ -9,16 +9,6 @@
 
 using namespace ftxui;
 
-// Форматує секунди у "MM:SS"
-static std::string fmt_time(int secs)
-{
-    if (secs < 0) return "--:--";
-    std::ostringstream oss;
-    oss << std::setw(2) << std::setfill('0') << secs / 60
-        << ":" << std::setw(2) << std::setfill('0') << secs % 60;
-    return oss.str();
-}
-
 RoomScreen::RoomScreen(
     ScreenInteractive& screen,
     std::function<void()> on_leave,
@@ -30,9 +20,9 @@ RoomScreen::RoomScreen(
     , on_leave_(std::move(on_leave))
     , on_mute_toggle_(std::move(on_mute_toggle))
     , on_upload_(std::move(on_upload))
-    , on_track_select_(std::move(on_track_select))
-    , on_tracks_refresh_(std::move(on_tracks_refresh))
 {
+    (void)on_track_select;
+    (void)on_tracks_refresh;
     build();
 }
 
@@ -95,7 +85,7 @@ void RoomScreen::set_tracks(std::vector<TrackEntry> tracks)
     std::lock_guard<std::mutex> lock(data_mutex_);
     tracks_ = std::move(tracks);
     if (selected_track_ >= static_cast<int>(tracks_.size())) {
-        selected_track_ = 0;
+        selected_track_ = tracks_.empty() ? 0 : static_cast<int>(tracks_.size()) - 1;
     }
     screen_.PostEvent(Event::Custom);
 }
@@ -119,13 +109,6 @@ void RoomScreen::set_muted(bool muted)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     muted_ = muted;
-    screen_.PostEvent(Event::Custom);
-}
-
-void RoomScreen::set_pomodoro(int seconds_remaining)
-{
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    pomodoro_secs_ = seconds_remaining;
     screen_.PostEvent(Event::Custom);
 }
 
@@ -185,7 +168,6 @@ Element RoomScreen::render_visualizer(const std::vector<float>& bars_data) const
     }
 
     return vbox({
-        text("  visualizer") | color(Color::GrayDark),
         text(wave) | color(Color::Cyan),
     });
 }
@@ -217,29 +199,18 @@ Element RoomScreen::render_tracks(const std::vector<TrackEntry>& tracks, int sel
     for (size_t i = 0; i < tracks.size(); ++i) {
         const auto& track = tracks[i];
         bool selected = static_cast<int>(i) == selected_track;
-        std::string label = "  " + std::string(selected ? ">" : " ") +
-            " #" + std::to_string(track.track_id) + " " + track.filename;
-        auto row = text(label);
+        auto row = text("  " + std::string(selected ? ">" : " ") +
+            " #" + std::to_string(track.track_id) + " " + track.filename);
         if (selected) {
-            row = row | color(Color::Cyan) | bold;
+            row = row | color(Color::Cyan) | bold | focus;
         }
         rows.push_back(row);
     }
 
-    return vbox(std::move(rows));
-}
-
-Element RoomScreen::render_pomodoro(int seconds_remaining) const
-{
-    if (seconds_remaining < 0) {
-        return text("  🍅  —") | color(Color::GrayDark);
-    }
-    return vbox({
-        hbox({
-            text("  🍅  pomodoro") | color(Color::GrayDark),
-        }),
-        text("  " + fmt_time(seconds_remaining)) | bold | color(Color::Cyan),
-    });
+    return vbox(std::move(rows))
+        | vscroll_indicator
+        | frame
+        | size(HEIGHT, LESS_THAN, 10);
 }
 
 Element RoomScreen::render_footer(int ping_ms, float loss, bool muted) const
@@ -251,7 +222,7 @@ Element RoomScreen::render_footer(int ping_ms, float loss, bool muted) const
     return hbox({
         text(oss.str()) | color(Color::GrayDark),
         filler(),
-        text(muted ? "  mic off  " : "  speaking  ")
+        text(muted ? "  🎙 off  " : "  🎙 on  ")
             | color(muted ? Color::Red : Color::Cyan),
     });
 }
@@ -280,28 +251,9 @@ void RoomScreen::build()
         }
     });
 
-    auto btn_select_track = Button("play", [this] {
-        uint16_t track_id = 0;
-        {
-            std::lock_guard<std::mutex> lock(data_mutex_);
-            if (tracks_.empty() || selected_track_ >= static_cast<int>(tracks_.size())) {
-                return;
-            }
-            track_id = tracks_[selected_track_].track_id;
-        }
-        if (on_track_select_) {
-            on_track_select_(track_id);
-        }
-    });
-
-    auto btn_refresh_tracks = Button("tracks", [this] {
-        if (on_tracks_refresh_) on_tracks_refresh_();
-    });
-
     auto container = Container::Vertical({
         Container::Horizontal({btn_leave, btn_mute}),
         Container::Horizontal({input_upload, btn_upload}),
-        Container::Horizontal({btn_select_track, btn_refresh_tracks}),
     });
 
     component_ = Renderer(container, [this, container] {
@@ -311,8 +263,7 @@ void RoomScreen::build()
         std::vector<float> viz;
         std::string upload_status;
         std::vector<TrackEntry> tracks;
-        int ping_ms, pomo_secs;
-        int selected_track;
+        int ping_ms, selected_track;
         float loss;
         bool muted, upload_status_is_error, upload_busy;
         {
@@ -327,7 +278,6 @@ void RoomScreen::build()
             ping_ms    = ping_ms_;
             loss       = loss_;
             muted      = muted_;
-            pomo_secs  = pomodoro_secs_;
             upload_status_is_error = upload_status_is_error_;
             upload_busy = upload_busy_;
         }
@@ -359,20 +309,12 @@ void RoomScreen::build()
             }),
             separator() | color(Color::GrayDark),
             render_tracks(tracks, selected_track),
-            hbox({
-                text("  "),
-                container->ChildAt(2)->ChildAt(0)->Render(),
-                text("  "),
-                container->ChildAt(2)->ChildAt(1)->Render(),
-            }),
         }) | flex;
 
         // Права колонка: юзери + помодоро
         auto right_col = vbox({
             render_users(users),
             filler(),
-            separator() | color(Color::GrayDark),
-            render_pomodoro(pomo_secs),
         }) | size(WIDTH, EQUAL, 20);
 
         return vbox({
@@ -409,25 +351,6 @@ void RoomScreen::build()
                 screen_.PostEvent(Event::Custom);
                 return true;
             }
-        }
-        if (event == Event::Return) {
-            uint16_t track_id = 0;
-            {
-                std::lock_guard<std::mutex> lock(data_mutex_);
-                if (!tracks_.empty() && selected_track_ < static_cast<int>(tracks_.size())) {
-                    track_id = tracks_[selected_track_].track_id;
-                }
-            }
-            if (track_id != 0 && on_track_select_) {
-                on_track_select_(track_id);
-            }
-            if (track_id != 0) {
-                return true;
-            }
-        }
-        if (event == Event::Character('r')) {
-            if (on_tracks_refresh_) on_tracks_refresh_();
-            return true;
         }
         if (event == Event::Character('q')) {
             if (on_leave_) on_leave_();

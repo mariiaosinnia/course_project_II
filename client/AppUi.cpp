@@ -38,6 +38,7 @@ AppUI::AppUI(ClientApp& app)
         screen_,
         username_,  // оновиться пізніше через navigate_to(Lobby)
         [this](const std::string& name) {
+            pending_created_room_name_ = name;
             app_.send_create_room(name);
         },
         [this](uint16_t room_id) {
@@ -85,15 +86,19 @@ AppUI::AppUI(ClientApp& app)
 
     app_.set_on_room_created([this](uint16_t room_id) {
         // Кімнату створено — одразу заходимо в неї
+        if (!pending_created_room_name_.empty()) {
+            room_names_[room_id] = pending_created_room_name_;
+        }
         app_.send_join_room(room_id);
         app_.send_list_rooms();
     });
 
     app_.set_on_room_joined([this](uint16_t room_id) {
-        room_->set_room_name("room #" + std::to_string(room_id));
+        room_->set_room_name(room_display_name(room_id));
         room_->set_track_name("track #" + std::to_string(room_id));
         room_->set_users({});
         room_->set_muted(!app_.is_voice_active());
+        pending_created_room_name_.clear();
         navigate_to(Screen::Room);
     });
 
@@ -108,6 +113,7 @@ AppUI::AppUI(ClientApp& app)
         {
             std::lock_guard<std::mutex> lock(state.room_list_mutex);
             for (const auto& r : state.room_list_cache) {
+                room_names_[r.room_id] = r.name;
                 entries.push_back({r.room_id, r.name, r.user_count, ""});
             }
         }
@@ -174,6 +180,15 @@ void AppUI::toggle_room_voice()
     } else {
         room_->set_upload_status("", false);
     }
+}
+
+std::string AppUI::room_display_name(uint16_t room_id) const
+{
+    auto it = room_names_.find(room_id);
+    if (it != room_names_.end() && !it->second.empty()) {
+        return it->second;
+    }
+    return "room #" + std::to_string(room_id);
 }
 
 void AppUI::run()

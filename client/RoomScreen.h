@@ -31,9 +31,8 @@ struct TrackEntry {
 //  ├──────────────────────┤                   │
 //  │  volume              │                   │
 //  │  ▌▌▌▌▌▌░░░░          ├───────────────────┤
-//  ├──────────────────────┤  🍅  pomodoro     │
-//  │  visualizer          │  20:14            │
-//  │  ▄▃▅▂▆▃▄▅▃▂▄▄▅▆▂▄   │  [ pause ]        │
+//  │  visualizer          │                   │
+//  │  ▄▃▅▂▆▃▄▅▃▂▄▄▅▆▂▄   │                   │
 //  ├──────────────────────┴───────────────────┤
 //  │  ping 24ms  ·  loss 0.2%        [ 🔇 ]  │
 //  └──────────────────────────────────────────┘
@@ -62,7 +61,6 @@ public:
     void set_ping(int ms, float loss_percent);
     void set_visualizer_data(std::vector<float> bars);  // 0.0–1.0 per bar
     void set_muted(bool muted);
-    void set_pomodoro(int seconds_remaining);  // -1 = вимкнено
     void set_upload_status(const std::string& status, bool is_error = false);
 
 private:
@@ -70,8 +68,6 @@ private:
     std::function<void()> on_leave_;
     std::function<void()> on_mute_toggle_;
     std::function<void(const std::string&)> on_upload_;
-    std::function<void(uint16_t)> on_track_select_;
-    std::function<void()> on_tracks_refresh_;
 
     mutable std::mutex data_mutex_;
 
@@ -84,7 +80,6 @@ private:
     float loss_ = 0.0f;
     std::vector<float> visualizer_bars_;
     bool muted_ = true;
-    int pomodoro_secs_ = -1;
     std::string upload_path_;
     std::string upload_status_;
     bool upload_status_is_error_ = false;
@@ -99,6 +94,5 @@ private:
     ftxui::Element render_visualizer(const std::vector<float>& bars) const;
     ftxui::Element render_upload(const std::string& status, bool is_error) const;
     ftxui::Element render_tracks(const std::vector<TrackEntry>& tracks, int selected_track) const;
-    ftxui::Element render_pomodoro(int seconds_remaining) const;
     ftxui::Element render_footer(int ping_ms, float loss, bool muted) const;
 };
