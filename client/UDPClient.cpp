@@ -2,6 +2,7 @@
 #include "Logger.h"
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 
 using boost::asio::ip::udp;
 
