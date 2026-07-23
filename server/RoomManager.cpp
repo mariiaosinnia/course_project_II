@@ -143,6 +143,14 @@ StatusCode RoomManager::leave_room(User& user, uint16_t room_id){
     return StatusCode::Success;
 }
 
+void RoomManager::remove_empty_room(uint16_t room_id) {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+    auto it = rooms.find(room_id);
+    if (it != rooms.end() && it->second.user_ids.empty()) {
+        rooms.erase(it);
+    }
+}
+
 std::vector<RoomListEntry> RoomManager::list_rooms() const{
     std::shared_lock<std::shared_mutex> lock(mutex);
     std::vector<RoomListEntry> rooms_list;

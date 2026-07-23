@@ -389,7 +389,7 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
             for (size_t b = 0; b < VISUALIZER_BARS; ++b) {
                 double sum_sq = 0;
                 size_t start = b * samples_per_bar;
-                size_t end = std::min(start + samples_per_bar, frame_count * CHANNELS);
+                size_t end = std::min(start + samples_per_bar, static_cast<size_t>(frame_count * CHANNELS));
                 for (size_t i = start; i < end; ++i) {
                     sum_sq += static_cast<double>(out[i]) * out[i];
                 }

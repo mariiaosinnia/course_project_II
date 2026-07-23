@@ -56,6 +56,7 @@ public:
     uint16_t create_room(const std::string& name);
     StatusCode join_room(User& user, uint16_t room_id);
     StatusCode leave_room(User& user, uint16_t room_id);
+    void remove_empty_room(uint16_t room_id);
 
     std::vector<RoomListEntry> list_rooms() const;
     std::vector<UserInfo> get_users_in_room(uint16_t room_id) const;
