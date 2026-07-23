@@ -46,6 +46,7 @@ public:
     bool start_voice_capture();
     void stop_voice_capture();
     bool is_voice_capturing() const { return voice_capturing_; }
+    void set_music_volume(float vol) { music_volume_.store(vol); }
 
 private:
     static int pa_callback_wrapper(const void* input, void* output,
@@ -99,6 +100,9 @@ private:
     std::atomic<uint64_t> packets_received_{0};
     std::atomic<uint64_t> underruns_{0};
     int consecutive_underruns_ = 0;
+
+    std::atomic<float> music_volume_{1.0f};
+    float current_volume_ = 1.0f;
 
     std::atomic<uint32_t> server_position_ms_{0};
     std::atomic<uint32_t> playback_position_ms_{0};

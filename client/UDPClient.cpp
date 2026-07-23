@@ -323,12 +323,23 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
 
         AudioFrame frame;
         if (pcm_queue_.pop(frame) && frame.pcm.size() == frame_count * CHANNELS) {
+            float target_vol = music_volume_.load();
+            if (current_volume_ != target_vol) {
+                if (current_volume_ < target_vol) {
+                    current_volume_ = std::min(current_volume_ + 0.05f, target_vol);
+                } else {
+                    current_volume_ = std::max(current_volume_ - 0.05f, target_vol);
+                }
+            }
+
+            for (size_t i = 0; i < frame.pcm.size(); i++) {
+                frame.pcm[i] = static_cast<int16_t>(frame.pcm[i] * current_volume_);
+            }
             std::memcpy(out, frame.pcm.data(), frame.pcm.size() * sizeof(int16_t));
             last_frame_ = frame.pcm;
-
             playback_position_ms_.store(frame.pts_ms);
-
             consecutive_underruns_ = 0;
+
         } else {
             underruns_++;
             consecutive_underruns_++;
