@@ -131,6 +131,10 @@ StatusCode RoomManager::leave_room(User& user, uint16_t room_id){
             recipients.assign(room_it->second.user_ids.begin(),
                               room_it->second.user_ids.end());
         }
+
+        if (room_it->second.user_ids.empty()) {
+            rooms.erase(room_it);
+        }
     }
 
     if (was_speaking && broadcast_fn) {

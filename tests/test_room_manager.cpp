@@ -58,7 +58,19 @@ TEST_F(RoomManagerTest, LeaveRoom_Success) {
     StatusCode status = room_manager.leave_room(*u, room_id);
     EXPECT_EQ(status, StatusCode::Success);
     EXPECT_EQ(u->room_id, 0);
-    EXPECT_EQ(room_manager.get_user_count(room_id), 0u);
+    EXPECT_TRUE(room_manager.list_rooms().empty());
+}
+
+TEST_F(RoomManagerTest, LeaveRoom_RoomStaysWhenNotEmpty) {
+    uint16_t room_id = room_manager.create_room("Test");
+    User* u1 = create_user(1);
+    User* u2 = create_user(2);
+    room_manager.join_room(*u1, room_id);
+    room_manager.join_room(*u2, room_id);
+
+    room_manager.leave_room(*u1, room_id);
+    EXPECT_EQ(room_manager.get_user_count(room_id), 1u);
+    EXPECT_EQ(room_manager.list_rooms().size(), 1u);
 }
 
 TEST_F(RoomManagerTest, LeaveRoom_NotInRoom) {
