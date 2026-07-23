@@ -287,6 +287,9 @@ void  UdpClient::handle_voice_packet(size_t bytes_received) {
     }
 
     voice_queue_.push(std::move(frame));
+
+    Logger::print("[voice] seq=" + std::to_string(seq) +
+              " queue_size=" + std::to_string(voice_queue_.size()));
 }
 
 int UdpClient::pa_callback_wrapper(const void* input, void* output,
