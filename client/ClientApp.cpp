@@ -538,6 +538,14 @@ void ClientApp::on_voice_started(const std::vector<uint8_t>& body)
     }
 
     Logger::print("VoiceStarted: id=" + std::to_string(parsed->client_id));
+
+    if (parsed->client_id != state_.client_id.load()) {
+        active_speakers_.fetch_add(1);
+        if (active_speakers_.load() > 0 && udp_client_) {
+            udp_client_->set_music_volume(0.2f);
+        }
+    }
+
     if (on_voice_started_cb_) on_voice_started_cb_(parsed->client_id);
 }
 
@@ -550,6 +558,15 @@ void ClientApp::on_voice_stopped(const std::vector<uint8_t>& body)
     }
 
     Logger::print("VoiceStopped: id=" + std::to_string(parsed->client_id));
+
+    int remaining = active_speakers_.fetch_sub(1) - 1;
+    if (remaining <= 0) {
+        active_speakers_.store(0);
+        if (udp_client_) {
+            udp_client_->set_music_volume(1.0f);
+        }
+    }
+
     if (on_voice_stopped_cb_) on_voice_stopped_cb_(parsed->client_id);
 }
 

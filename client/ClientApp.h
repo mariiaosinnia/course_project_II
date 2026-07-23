@@ -86,6 +86,7 @@ private:
     boost::asio::io_context& io_context_;
     std::mutex upload_mutex_;
     std::string pending_upload_filename_;
+    std::atomic<int> active_speakers_{0};
 
     std::function<void(uint32_t)> on_connected_cb_;
     std::function<void()> on_disconnected_cb_;

@@ -44,6 +44,7 @@ void TCPServer::start_accept() {
 
                 auto packet = PacketBuilder::user_left(id);
                 room_manager.broadcast_to_room(room_id, packet, *user);
+                room_manager.remove_empty_room(room_id);
             }
             active_connections.erase(id);
             user_manager.remove(id);

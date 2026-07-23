@@ -287,6 +287,9 @@ void  UdpClient::handle_voice_packet(size_t bytes_received) {
     }
 
     voice_queue_.push(std::move(frame));
+
+    Logger::print("[voice] seq=" + std::to_string(seq) +
+              " queue_size=" + std::to_string(voice_queue_.size()));
 }
 
 int UdpClient::pa_callback_wrapper(const void* input, void* output,
@@ -323,12 +326,23 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
 
         AudioFrame frame;
         if (pcm_queue_.pop(frame) && frame.pcm.size() == frame_count * CHANNELS) {
+            float target_vol = music_volume_.load();
+            if (current_volume_ != target_vol) {
+                if (current_volume_ < target_vol) {
+                    current_volume_ = std::min(current_volume_ + 0.05f, target_vol);
+                } else {
+                    current_volume_ = std::max(current_volume_ - 0.05f, target_vol);
+                }
+            }
+
+            for (size_t i = 0; i < frame.pcm.size(); i++) {
+                frame.pcm[i] = static_cast<int16_t>(frame.pcm[i] * current_volume_);
+            }
             std::memcpy(out, frame.pcm.data(), frame.pcm.size() * sizeof(int16_t));
             last_frame_ = frame.pcm;
-
             playback_position_ms_.store(frame.pts_ms);
-
             consecutive_underruns_ = 0;
+
         } else {
             underruns_++;
             consecutive_underruns_++;
@@ -369,6 +383,24 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
                 }
             }
         }
+    }
+
+    if (on_visualizer_data_) {
+        std::vector<float> bars(VISUALIZER_BARS, 0.0f);
+        size_t samples_per_bar = (frame_count * CHANNELS) / VISUALIZER_BARS;
+        if (samples_per_bar > 0) {
+            for (size_t b = 0; b < VISUALIZER_BARS; ++b) {
+                double sum_sq = 0;
+                size_t start = b * samples_per_bar;
+                size_t end = std::min(start + samples_per_bar, static_cast<size_t>(frame_count * CHANNELS));
+                for (size_t i = start; i < end; ++i) {
+                    sum_sq += static_cast<double>(out[i]) * out[i];
+                }
+                double rms = std::sqrt(sum_sq / (end - start));
+                bars[b] = static_cast<float>(std::clamp(rms / 8000.0, 0.0, 1.0));
+            }
+        }
+        on_visualizer_data_(bars);
     }
 
     return paContinue;

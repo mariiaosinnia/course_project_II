@@ -98,6 +98,7 @@ std::vector<uint8_t> Executor::handle_leave_room(User& user) {
     std::vector<uint8_t>
         packet = PacketBuilder::user_left(user.id);
     room_manager.broadcast_to_room(room_id, packet, user);
+    room_manager.remove_empty_room(room_id);
 
     return PacketBuilder::room_left();
 }
