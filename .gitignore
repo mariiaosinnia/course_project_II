@@ -58,5 +58,5 @@ CMakePresets.json
 cmake-build-debug/
 
 
-uploads/
+uploads/room*
 client.log

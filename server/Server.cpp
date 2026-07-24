@@ -6,7 +6,7 @@ Server::Server()
     : room_manager(user_manager)
     , tcp_server(io_context, room_manager, user_manager)
     , udp_server(UDP_SERVER_PORT, room_manager,
-                 std::filesystem::path(__FILE__).parent_path().parent_path())
+    std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : "/root") / "course_project_II" / "uploads" / "default")
 {
     room_manager.set_on_first_user_joined([this](uint16_t room_id) {
         udp_server.startStreaming(room_id);

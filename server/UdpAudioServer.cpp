@@ -8,7 +8,9 @@ UdpAudioServer::UdpAudioServer(unsigned short udp_port,
                                RoomManager &room_manager,
                                std::filesystem::path resource_dir)
     : room_manager_(room_manager), udp_socket_(udp_port),
-      resource_dir_(std::move(resource_dir)) {}
+      resource_dir_(std::move(resource_dir)) {
+    loadDefaultTracks();
+}
 
 uint16_t UdpAudioServer::addTrack(const std::string &file_path) {
   auto track = prepareTrack(file_path);
@@ -39,6 +41,7 @@ UdpAudioServer::prepareTrack(const std::string &file_path) {
   size_t total_frames = total_samples / samples_per_frame;
 
   track->opus_packets.reserve(total_frames);
+  track->name = std::filesystem::path(file_path).stem().string();
   for (size_t i = 0; i < total_frames; ++i) {
     const int16_t *frame_start =
         track->pcm_data.data() + (i * samples_per_frame * track->channels);
@@ -264,4 +267,26 @@ std::vector<TrackListEntry> UdpAudioServer::getTrackList() const {
 
 bool UdpAudioServer::isTrackExists(uint16_t track_id) const {
   return tracks_.find(track_id) != tracks_.end();
+}
+
+void UdpAudioServer::loadDefaultTracks() {
+  namespace fs = std::filesystem;
+
+  if (!fs::exists(resource_dir_) || !fs::is_directory(resource_dir_)) {
+    std::cerr << "Default tracks directory not found: " << resource_dir_ << "\n";
+    return;
+  }
+
+  for (const auto& entry : fs::directory_iterator(resource_dir_)) {
+    if (!entry.is_regular_file()) continue;
+    if (entry.path().extension() != ".mp3") continue;
+
+    uint16_t track_id = addTrack(entry.path().string());
+    if (track_id != 0) {
+      std::cout << "Default track loaded: " << entry.path().filename()
+                 << " (id=" << track_id << ")\n";
+    } else {
+      std::cerr << "Failed to load default track: " << entry.path() << "\n";
+    }
+  }
 }
