@@ -539,12 +539,12 @@ void ClientApp::on_voice_started(const std::vector<uint8_t>& body)
 
     Logger::print("VoiceStarted: id=" + std::to_string(parsed->client_id));
 
-    if (parsed->client_id != state_.client_id.load()) {
-        active_speakers_.fetch_add(1);
-        if (active_speakers_.load() > 0 && udp_client_) {
-            udp_client_->set_music_volume(0.2f);
-        }
+
+    active_speakers_.fetch_add(1);
+    if (active_speakers_.load() > 0 && udp_client_) {
+        udp_client_->set_music_volume(0.05f);
     }
+
 
     if (on_voice_started_cb_) on_voice_started_cb_(parsed->client_id);
 }
