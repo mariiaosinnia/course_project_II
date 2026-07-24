@@ -160,6 +160,13 @@ endif()
 add_subdirectory(server)
 add_subdirectory(client)
 
+# -- For Clients ---
+
+option(BUILD_SERVER "Build server" OFF)
+if(BUILD_SERVER)
+    add_subdirectory(server)
+endif()
+
 # --- Tests ---
 
 if(BUILD_TESTING)
