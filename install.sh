@@ -170,9 +170,9 @@ echo ""
 # В install.sh після створення ./studyroom лаунчера — додати:
 
 if [[ "$OS" == "macos" ]]; then
-    # .app bundle для macOS
     APP_PATH="$HOME/Desktop/StudyRoom.app"
     mkdir -p "$APP_PATH/Contents/MacOS"
+    mkdir -p "$APP_PATH/Contents/Resources"  # <-- додати це
 
     FULL_PATH="$(pwd)/$BINARY_PATH"
     cat > "$APP_PATH/Contents/MacOS/StudyRoom" << EOF
@@ -182,7 +182,7 @@ open -a Terminal "$FULL_PATH"
 EOF
     chmod +x "$APP_PATH/Contents/MacOS/StudyRoom"
 
-    cat > "$APP_PATH/Contents/Info.plist" << 'EOF'
+    cat > "$APP_PATH/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
@@ -190,16 +190,56 @@ EOF
     <key>CFBundleExecutable</key><string>StudyRoom</string>
     <key>CFBundleIdentifier</key><string>com.studyroom.client</string>
     <key>CFBundleVersion</key><string>1.0</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
 </dict>
 </plist>
-EOF
+PLIST
+
+    # Іконка — всередині того самого if
+    if [[ -f "assets/icon.png" ]]; then
+        mkdir -p icon.iconset
+        sips -z 16 16   assets/icon.png --out icon.iconset/icon_16x16.png    2>/dev/null
+        sips -z 32 32   assets/icon.png --out icon.iconset/icon_16x16@2x.png 2>/dev/null
+        sips -z 128 128 assets/icon.png --out icon.iconset/icon_128x128.png  2>/dev/null
+        sips -z 256 256 assets/icon.png --out icon.iconset/icon_128x128@2x.png 2>/dev/null
+        sips -z 512 512 assets/icon.png --out icon.iconset/icon_512x512.png  2>/dev/null
+        iconutil -c icns icon.iconset -o "$APP_PATH/Contents/Resources/AppIcon.icns"
+        rm -rf icon.iconset
+        ok "Applied custom icon"
+    fi
+
     ok "Created StudyRoom.app on Desktop"
 
 elif [[ "$OS" == "linux" ]]; then
-    # .desktop файл для Linux
     FULL_PATH="$(pwd)/$BINARY_PATH"
     WORK_DIR="$(pwd)"
     DESKTOP_FILE="$HOME/Desktop/StudyRoom.desktop"
+
+    # Іконка — копіюємо png в системну папку
+    ICON_PATH="audio-headphones"  # дефолт якщо нема кастомної
+    if [[ -f "assets/icon.png" ]]; then
+        ICON_DIR="$HOME/.local/share/icons/hicolor"
+
+        # Копіюємо в стандартні розміри
+        for size in 16 32 48 64 128 256 512; do
+            mkdir -p "$ICON_DIR/${size}x${size}/apps"
+            if command -v convert &>/dev/null; then
+                # ImageMagick якщо є
+                convert "assets/icon.png" -resize "${size}x${size}" \
+                    "$ICON_DIR/${size}x${size}/apps/studyroom.png" 2>/dev/null || true
+            else
+                # Без конвертації — просто копіюємо оригінал
+                cp "assets/icon.png" "$ICON_DIR/${size}x${size}/apps/studyroom.png" 2>/dev/null || true
+            fi
+        done
+
+        # Оновлюємо кеш іконок
+        command -v gtk-update-icon-cache &>/dev/null && \
+            gtk-update-icon-cache -f "$ICON_DIR" 2>/dev/null || true
+
+        ICON_PATH="studyroom"
+        ok "Applied custom icon"
+    fi
 
     cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
@@ -208,13 +248,13 @@ Type=Application
 Name=StudyRoom
 Comment=Synchronized music listening
 Exec=bash -c 'cd $WORK_DIR && $FULL_PATH; exec bash'
-Icon=audio-headphones
+Icon=$ICON_PATH
 Terminal=true
 Categories=AudioVideo;
 EOF
     chmod +x "$DESKTOP_FILE"
 
-    # Деякі дистрибутиви вимагають додатково довіряти .desktop файлу
-    command -v gio &>/dev/null && gio set "$DESKTOP_FILE" metadata::trusted true 2>/dev/null || true
+    command -v gio &>/dev/null && \
+        gio set "$DESKTOP_FILE" metadata::trusted true 2>/dev/null || true
     ok "Created StudyRoom shortcut on Desktop"
 fi

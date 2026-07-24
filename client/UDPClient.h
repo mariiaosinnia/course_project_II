@@ -123,4 +123,11 @@ private:
 
     uint32_t expected_voice_seq_ = 0;
     bool first_voice_packet_ = true;
+
+    std::shared_ptr<boost::asio::steady_timer> registration_timer_;
+    std::atomic<bool> registered_{false};
+    int registration_attempts_ = 0;
+    static constexpr int MAX_REGISTRATION_ATTEMPTS = 15; // ~15 * 300ms = 4.5s
+
+    void schedule_registration_retry();
 };

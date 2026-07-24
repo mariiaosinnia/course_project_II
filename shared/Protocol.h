@@ -59,6 +59,7 @@ enum class PacketType : uint8_t {
 enum class UdpPacketType : uint8_t {
     Music = 0x01,
     Voice = 0x02,
+    RegistrationAck = 0x03,
     Registration = 0xFF
 };
 

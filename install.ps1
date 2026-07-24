@@ -184,3 +184,58 @@ $shortcut.Description = "StudyRoom - synchronized listening"
 $shortcut.Save()
 
 Write-Ok "Created StudyRoom shortcut on Desktop"
+
+$iconPng = Join-Path (Get-Location) "assets\icon.png"
+if (Test-Path $iconPng) {
+    Add-Type -AssemblyName System.Drawing
+
+    $png = [System.Drawing.Image]::FromFile($iconPng)
+    $icoPath = Join-Path (Get-Location) "assets\icon.ico"
+
+    # Створюємо ico з кількох розмірів
+    $sizes = @(16, 32, 48, 64, 128, 256)
+    $memStream = New-Object System.IO.MemoryStream
+
+    # ICO header
+    $writer = New-Object System.IO.BinaryWriter($memStream)
+    $writer.Write([uint16]0)      # reserved
+    $writer.Write([uint16]1)      # type: ico
+    $writer.Write([uint16]$sizes.Count)  # image count
+
+    $imageStreams = @()
+    $offset = 6 + $sizes.Count * 16  # header + directory size
+
+    foreach ($size in $sizes) {
+        $bmp = New-Object System.Drawing.Bitmap($png, $size, $size)
+        $imgStream = New-Object System.IO.MemoryStream
+        $bmp.Save($imgStream, [System.Drawing.Imaging.ImageFormat]::Png)
+        $imageStreams += $imgStream
+        $bmp.Dispose()
+
+        $bytes = $imgStream.ToArray()
+        $writer.Write([byte]($size -eq 256 ? 0 : $size))
+        $writer.Write([byte]($size -eq 256 ? 0 : $size))
+        $writer.Write([byte]0)   # color count
+        $writer.Write([byte]0)   # reserved
+        $writer.Write([uint16]1) # planes
+        $writer.Write([uint16]32) # bit count
+        $writer.Write([uint32]$bytes.Length)
+        $writer.Write([uint32]$offset)
+        $offset += $bytes.Length
+    }
+
+    foreach ($imgStream in $imageStreams) {
+        $writer.Write($imgStream.ToArray())
+        $imgStream.Dispose()
+    }
+
+    [System.IO.File]::WriteAllBytes($icoPath, $memStream.ToArray())
+    $png.Dispose()
+    $writer.Dispose()
+
+    $shortcut.IconLocation = $icoPath
+    Write-Ok "Applied custom icon to shortcut"
+} else {
+
+    $shortcut.IconLocation = "C:\Windows\System32\imageres.dll,105"
+}

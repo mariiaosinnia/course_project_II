@@ -85,7 +85,7 @@ bool UdpClient::start() {
     }
 
     running_ = true;
-    send_registration();
+    schedule_registration_retry();
     start_receive();
 
     Logger::print("UDP client started, registering with server...");
@@ -220,6 +220,12 @@ void UdpClient::handle_receive(const boost::system::error_code& ec, size_t bytes
             break;
         case UdpPacketType::Voice:
             handle_voice_packet(bytes_received);
+            break;
+        case UdpPacketType::RegistrationAck:
+            if (!registered_.exchange(true)) {
+                Logger::print("UDP registration confirmed by server");
+                if (registration_timer_) registration_timer_->cancel();
+            }
             break;
         default:
             Logger::print("[warning] unknown UDP packet type received");
@@ -509,4 +515,21 @@ void UdpClient::process_voice_capture(const void* input, unsigned long frame_cou
     if (ec) {
         Logger::print("voice UDP send error: " + ec.message());
     }
+}
+
+void UdpClient::schedule_registration_retry() {
+    if (registered_ || !running_) return;
+    if (registration_attempts_ >= MAX_REGISTRATION_ATTEMPTS) {
+        Logger::print("[error] UDP registration failed after max attempts");
+        return;
+    }
+
+    send_registration();
+    registration_attempts_++;
+
+    registration_timer_ = std::make_shared<boost::asio::steady_timer>(io_context_);
+    registration_timer_->expires_after(std::chrono::milliseconds(300));
+    registration_timer_->async_wait([self = shared_from_this()](const boost::system::error_code& ec) {
+        if (!ec) self->schedule_registration_retry();
+    });
 }

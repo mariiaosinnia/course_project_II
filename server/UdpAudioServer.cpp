@@ -214,6 +214,10 @@ void UdpAudioServer::receiveLoop() {
                              (static_cast<uint32_t>(buffer[3]) << 8) |
                              (static_cast<uint32_t>(buffer[4]));
         registerClient(client_id, sender);
+
+        std::vector<uint8_t> ack(1);
+        ack[0] = static_cast<uint8_t>(UdpPacketType::RegistrationAck);
+        udp_socket_.sendTo(ack, sender);
       }
       break;
     }
@@ -254,8 +258,12 @@ UdpAudioServer::handleVoicePacket(const std::vector<uint8_t> &buffer,
 }
 
 std::vector<TrackListEntry> UdpAudioServer::getTrackList() const {
+  std::lock_guard<std::mutex> lock(tracks_mutex_);
   std::vector<TrackListEntry> result;
-  for (const auto &[id, track] : tracks_) {
+  for (const auto& [id, track] : tracks_) {
+    if (default_track_ids_.find(id) == default_track_ids_.end()) {
+      continue;  // пропускаємо завантажені через upload
+    }
     TrackListEntry element{};
     element.track_id = id;
     std::strncpy(element.filename, track->name.c_str(),
@@ -283,6 +291,7 @@ void UdpAudioServer::loadDefaultTracks() {
 
     uint16_t track_id = addTrack(entry.path().string());
     if (track_id != 0) {
+      default_track_ids_.insert(track_id);
       std::cout << "Default track loaded: " << entry.path().filename()
                  << " (id=" << track_id << ")\n";
     } else {

@@ -65,7 +65,7 @@ private:
 
   std::unordered_map<uint16_t, std::shared_ptr<Track>> tracks_;
   uint16_t next_track_id_ = 1;
-  std::mutex tracks_mutex_;
+  mutable std::mutex tracks_mutex_;
 
   std::unordered_map<uint16_t, PlaybackRoom> active_rooms_;
   std::mutex active_rooms_mutex_;
@@ -73,4 +73,6 @@ private:
   std::filesystem::path resource_dir_;
   std::atomic<bool> running{true};
   std::thread scheduler_thread_;
+
+  std::unordered_set<uint16_t> default_track_ids_;
 };
