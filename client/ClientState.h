@@ -17,4 +17,6 @@ struct ClientState {
     std::vector<RoomListEntry> room_list_cache;
     std::mutex track_list_mutex;
     std::vector<TrackListEntry> track_list_cache;
+    std::mutex queue_list_mutex;
+    std::vector<QueueListEntry> queue_list_cache;
 };

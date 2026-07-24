@@ -140,6 +140,36 @@ std::optional<PacketParser::TrackListResult> PacketParser::parse_track_list(
     return result;
 }
 
+std::optional<PacketParser::QueueListResult> PacketParser::parse_queue_list(
+    const std::vector<uint8_t>& body)
+{
+    if (body.size() < sizeof(QueueListHeader)) {
+        return std::nullopt;
+    }
+
+    QueueListHeader header;
+    std::memcpy(&header, body.data(), sizeof(QueueListHeader));
+
+    const size_t expected_size =
+        sizeof(QueueListHeader) + header.track_count * sizeof(QueueListEntry);
+    if (body.size() < expected_size) {
+        return std::nullopt;
+    }
+
+    QueueListResult result;
+    const uint8_t* cursor = body.data() + sizeof(QueueListHeader);
+    for (uint8_t i = 0; i < header.track_count; ++i) {
+        QueueListEntry entry;
+        std::memcpy(&entry, cursor, sizeof(QueueListEntry));
+        entry.track_id = boost::endian::big_to_native(entry.track_id);
+        entry.filename[sizeof(entry.filename) - 1] = '\0';
+        result.tracks.push_back(entry);
+        cursor += sizeof(QueueListEntry);
+    }
+
+    return result;
+}
+
 std::optional<PacketParser::RoomJoinedResult> PacketParser::parse_room_joined(
     const std::vector<uint8_t>& body)
 {

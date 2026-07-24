@@ -1,6 +1,7 @@
 #include "RoomManager.h"
 #include "PacketBuilder.h"
 #include <iostream>
+#include <unordered_map>
 
 RoomManager::RoomManager(UserManager& um) : user_manager(um)
 {
@@ -287,11 +288,22 @@ std::vector<uint16_t> RoomManager::get_active_room_ids() const {
 }
 
 void RoomManager::start_playback(uint16_t room_id, std::chrono::steady_clock::time_point start_time) {
-    std::unique_lock<std::shared_mutex> lock(mutex);
-    auto it = rooms.find(room_id);
-    if (it != rooms.end()) {
-        it->second.track_started_at = start_time;
-        it->second.is_playing = true;
+    std::vector<uint32_t> recipients;
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex);
+        auto it = rooms.find(room_id);
+        if (it != rooms.end()) {
+            it->second.track_started_at = start_time;
+            it->second.is_playing = true;
+            recipients.assign(it->second.user_ids.begin(), it->second.user_ids.end());
+        }
+    }
+
+    if (broadcast_fn && !recipients.empty()) {
+        auto packet = PacketBuilder::queue_list(list_queue(room_id));
+        for (uint32_t uid : recipients) {
+            broadcast_fn(uid, packet);
+        }
     }
 }
 
@@ -305,14 +317,26 @@ uint16_t RoomManager::get_current_track_id(uint16_t room_id) const {
 }
 
 uint16_t RoomManager::advance_track(uint16_t room_id, std::chrono::steady_clock::time_point start_time) {
-    std::unique_lock<std::shared_mutex> lock(mutex);
-    auto it = rooms.find(room_id);
-    if (it != rooms.end()) {
-        uint16_t next_id = it->second.next_track();
-        it->second.track_started_at = start_time;
-        return next_id;
+    uint16_t next_id = 0;
+    std::vector<uint32_t> recipients;
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex);
+        auto it = rooms.find(room_id);
+        if (it != rooms.end()) {
+            next_id = it->second.next_track();
+            it->second.track_started_at = start_time;
+            recipients.assign(it->second.user_ids.begin(), it->second.user_ids.end());
+        }
     }
-    return 0;
+
+    if (next_id != 0 && broadcast_fn && !recipients.empty()) {
+        auto packet = PacketBuilder::queue_list(list_queue(room_id));
+        for (uint32_t uid : recipients) {
+            broadcast_fn(uid, packet);
+        }
+    }
+
+    return next_id;
 }
 
 size_t RoomManager::get_user_count(uint16_t room_id) const {
@@ -433,6 +457,38 @@ std::vector<TrackListEntry> RoomManager::list_tracks() const {
     return {};
 }
 
+std::vector<QueueListEntry> RoomManager::list_queue(uint16_t room_id) const {
+    std::unordered_map<uint16_t, std::string> filenames;
+    if (list_tracks_fn_) {
+        for (const auto& track : list_tracks_fn_()) {
+            filenames.emplace(track.track_id, std::string(track.filename));
+        }
+    }
+
+    std::shared_lock<std::shared_mutex> lock(mutex);
+    auto room_it = rooms.find(room_id);
+    if (room_it == rooms.end()) {
+        return {};
+    }
+
+    std::vector<QueueListEntry> result;
+    const Room& room = room_it->second;
+    result.reserve(room.track_ids.size());
+    for (size_t i = 0; i < room.track_ids.size(); ++i) {
+        QueueListEntry entry{};
+        entry.track_id = room.track_ids[i];
+        entry.is_current = room.is_playing && i == room.current_track_index ? 1 : 0;
+        auto filename_it = filenames.find(entry.track_id);
+        std::string filename = filename_it != filenames.end()
+            ? filename_it->second
+            : "track #" + std::to_string(entry.track_id);
+        std::strncpy(entry.filename, filename.c_str(), FILENAME_MAX_LEN - 1);
+        entry.filename[FILENAME_MAX_LEN - 1] = '\0';
+        result.push_back(entry);
+    }
+    return result;
+}
+
 void RoomManager::set_track_exists_fn(TrackExistsFn fn) {
     track_exists_fn_ = std::move(fn);
 }
@@ -460,12 +516,6 @@ StatusCode RoomManager::select_track_for_room(uint16_t room_id, uint16_t track_i
         }
 
         Room& room = room_it->second;
-
-        for (uint16_t existing_id : room.track_ids) {
-            if (existing_id == track_id) {
-                return StatusCode::Success;
-            }
-        }
 
         room.track_ids.push_back(track_id);
 

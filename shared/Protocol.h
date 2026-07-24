@@ -34,6 +34,7 @@ enum class PacketType : uint8_t {
     UploadTrackData = 0x0C,
     UploadTrackEnd = 0x0D,
     ListTracks = 0x0E,
+    ListQueue = 0x0F,
 
     // server → client
     Connected = 0x10,
@@ -50,6 +51,7 @@ enum class PacketType : uint8_t {
     Pong = 0x1B,
     TrackAdded = 0x1C,
     TrackList = 0x1D,
+    QueueList = 0x1E,
     Error = 0x1F,
 };
 
@@ -167,6 +169,16 @@ struct TrackListEntry {
 };
 
 struct TrackListHeader {
+    uint8_t track_count;
+};
+
+struct QueueListEntry {
+    uint16_t track_id;
+    uint8_t is_current;
+    char filename[FILENAME_MAX_LEN];
+};
+
+struct QueueListHeader {
     uint8_t track_count;
 };
  

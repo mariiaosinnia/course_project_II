@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <ftxui/component/screen_interactive.hpp>
 
@@ -40,6 +41,7 @@ private:
 
     void navigate_to(Screen s);
     void toggle_room_voice();
+    std::string room_display_name(uint16_t room_id) const;
 
     ClientApp& app_;
     ftxui::ScreenInteractive screen_;
@@ -50,4 +52,8 @@ private:
 
     Screen current_ = Screen::Login;
     std::string username_;
+    std::string pending_created_room_name_;
+    std::unordered_map<uint16_t, std::string> room_names_;
+    uint16_t current_room_id_ = 0;
+    uint16_t current_playing_track_id_ = 0;
 };

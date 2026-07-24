@@ -143,4 +143,29 @@ std::vector<uint8_t> PacketBuilder::track_list(const std::vector<TrackListEntry>
     }
 
     return packet;
-}
+}
+
+std::vector<uint8_t> PacketBuilder::queue_list(const std::vector<QueueListEntry>& tracks) {
+    QueueListHeader list_header;
+    list_header.track_count = static_cast<uint8_t>(tracks.size());
+
+    uint16_t payload_size = sizeof(QueueListHeader) + tracks.size() * sizeof(QueueListEntry);
+
+    PacketHeader header;
+    header.type = static_cast<uint8_t>(PacketType::QueueList);
+    header.payload_size = boost::endian::native_to_big(payload_size);
+
+    std::vector<uint8_t> packet(sizeof(PacketHeader) + payload_size);
+    std::memcpy(packet.data(), &header, sizeof(PacketHeader));
+    std::memcpy(packet.data() + sizeof(PacketHeader), &list_header, sizeof(QueueListHeader));
+
+    size_t offset = sizeof(PacketHeader) + sizeof(QueueListHeader);
+    for (const QueueListEntry& entry : tracks) {
+        QueueListEntry e = entry;
+        e.track_id = boost::endian::native_to_big(e.track_id);
+        std::memcpy(packet.data() + offset, &e, sizeof(QueueListEntry));
+        offset += sizeof(QueueListEntry);
+    }
+
+    return packet;
+}

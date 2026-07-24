@@ -5,6 +5,13 @@
 
 using namespace ftxui;
 
+namespace {
+Color accent() { return Color::MediumPurple1; }
+Color accent_soft() { return Color::Violet; }
+Color soft_text() { return Color::GrayDark; }
+Color section_text() { return Color::White; }
+}
+
 // Іконки для кімнат (ротуємо по room_id)
 static const char* room_icons[] = {"☁", "☕", "🌙", "🍅", "🎵", "⭐"};
 static const char* room_icon(uint16_t room_id) {
@@ -53,11 +60,13 @@ void LobbyScreen::build()
 {
     auto input_name = Input(&new_room_name_, "room name...");
 
-    auto btn_create = Button("[ + new ]", [this] {
+    auto create_room = [this] {
         if (new_room_name_.empty()) return;
         if (on_create_) on_create_(new_room_name_);
         new_room_name_.clear();
-    });
+    };
+
+    auto btn_create = Button("+ room", create_room);
 
     auto container = Container::Horizontal({input_name, btn_create});
 
@@ -81,16 +90,17 @@ void LobbyScreen::build()
 
                 // Рядок 1: іконка + назва кімнати
                 auto name_line = hbox({
-                    text("  " + std::string(room_icon(r.room_id)) + "  "),
+                    text("  " + std::string(selected ? ">" : " ") + " "),
+                    text(std::string(room_icon(r.room_id)) + "  "),
                     text(r.name) | (selected ? bold : nothing),
-                }) | (selected ? color(Color::Cyan) : nothing);
+                }) | (selected ? color(accent()) : nothing);
 
                 // Рядок 2: трек · кількість онлайн
-                std::string meta = "     ";
+                std::string meta = "       ";
                 if (!r.track_name.empty()) meta += r.track_name + "  ·  ";
                 meta += std::to_string(r.user_count) + " online";
 
-                auto meta_line = text(meta) | color(Color::GrayDark);
+                auto meta_line = text(meta) | color(soft_text());
 
                 room_elements.push_back(name_line);
                 room_elements.push_back(meta_line);
@@ -100,9 +110,12 @@ void LobbyScreen::build()
 
         // Рядок створення кімнати
         auto create_row = hbox({
+            text("  new room: ") | color(soft_text()),
             text("  "),
             container->ChildAt(0)->Render()
-                | size(WIDTH, EQUAL, 24),
+                | size(WIDTH, EQUAL, 26)
+                | border
+                | color(soft_text()),
             text("  "),
             container->ChildAt(1)->Render(),
         });
@@ -111,23 +124,23 @@ void LobbyScreen::build()
         Element footer = text("");
         if (!status_.empty()) {
             footer = text("  " + status_)
-                | color(status_is_error_ ? Color::Red : Color::GrayDark);
+                | color(status_is_error_ ? accent() : soft_text());
         }
 
         return vbox({
             // Header
             hbox({
-                text("  ♪  ") | color(Color::Cyan),
-                text("StudyRoom") | bold | color(Color::Cyan),
+                text("  /ᐠ｡ꞈ｡ᐟ\\  ") | color(accent_soft()),
+                text("StudyRoom") | bold | color(section_text()),
                 filler(),
-                text(username_ + "  ▾") | color(Color::GrayDark),
+                text(username_ + "  ▾") | color(soft_text()),
                 text("  "),
             }),
             separator(),
 
             // Rooms label + create
             hbox({
-                text("  rooms") | color(Color::GrayDark),
+                text("  rooms") | color(soft_text()),
                 filler(),
                 create_row,
                 text("  "),
@@ -143,14 +156,25 @@ void LobbyScreen::build()
             hbox({
                 footer,
                 filler(),
-                text("  ↑↓ navigate  ·  enter to join  ") | color(Color::GrayDark),
+                text("  ↑↓ choose room  ·  enter joins selected  ·  r refresh  ") | color(soft_text()),
             }),
 
         }) | border;
     });
 
     // Клавіатурна навігація по кімнатах
-    component_ = CatchEvent(component_, [this](Event event) {
+    component_ = CatchEvent(component_, [this, input_name, create_room](Event event) {
+        if (input_name->Focused() && event.is_character()) {
+            return false;
+        }
+        if (input_name->Focused() && event == Event::Return) {
+            create_room();
+            return true;
+        }
+        if (event == Event::Character('r')) {
+            if (on_refresh_) on_refresh_();
+            return true;
+        }
         std::lock_guard<std::mutex> lock(rooms_mutex_);
         if (rooms_.empty()) return false;
 
@@ -166,10 +190,6 @@ void LobbyScreen::build()
         }
         if (event == Event::Return) {
             if (on_join_) on_join_(rooms_[selected_].room_id);
-            return true;
-        }
-        if (event == Event::Character('r')) {
-            if (on_refresh_) on_refresh_();
             return true;
         }
         return false;

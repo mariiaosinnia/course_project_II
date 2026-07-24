@@ -21,6 +21,7 @@ public:
     static std::vector<uint8_t> voice_started(uint32_t client_id);
     static std::vector<uint8_t> voice_stopped(uint32_t client_id);
     static std::vector<uint8_t> track_list(const std::vector<TrackListEntry>& tracks);
+    static std::vector<uint8_t> queue_list(const std::vector<QueueListEntry>& tracks);
 private:
     static std::vector<uint8_t> build(PacketType type);
     template<typename T>

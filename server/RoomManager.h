@@ -92,6 +92,7 @@ public:
     using ListTracksFn = std::function<std::vector<TrackListEntry>()>;
     void set_list_tracks_fn(ListTracksFn fn);
     std::vector<TrackListEntry> list_tracks() const;
+    std::vector<QueueListEntry> list_queue(uint16_t room_id) const;
 
     using TrackExistsFn = std::function<bool(uint16_t)>;
     void set_track_exists_fn(TrackExistsFn fn);
