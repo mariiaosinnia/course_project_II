@@ -49,6 +49,11 @@ std::vector<uint8_t> PacketBuilder::list_tracks()
     return build(PacketType::ListTracks);
 }
 
+std::vector<uint8_t> PacketBuilder::list_queue()
+{
+    return build(PacketType::ListQueue);
+}
+
 std::vector<uint8_t> PacketBuilder::track_select(uint16_t track_id)
 {
     TrackSelectBody body{};

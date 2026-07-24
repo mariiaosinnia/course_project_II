@@ -54,4 +54,6 @@ private:
     std::string username_;
     std::string pending_created_room_name_;
     std::unordered_map<uint16_t, std::string> room_names_;
+    uint16_t current_room_id_ = 0;
+    uint16_t current_playing_track_id_ = 0;
 };

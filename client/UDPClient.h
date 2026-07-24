@@ -11,6 +11,8 @@
 #include <deque>
 #include <mutex>
 #include <atomic>
+#include <chrono>
+#include <functional>
 #include "Protocol.h"
 
 constexpr int SAMPLE_RATE = 48000;
@@ -47,6 +49,7 @@ public:
     void stop_voice_capture();
     bool is_voice_capturing() const { return voice_capturing_; }
     void set_music_volume(float vol) { music_volume_.store(vol); }
+    void SetVisualizerCallback(std::function<void(std::vector<float>)> callback);
 
 private:
     static int pa_callback_wrapper(const void* input, void* output,
@@ -56,6 +59,7 @@ private:
                                    void* userData);
 
     int process_audio(void* output, unsigned long frame_count);
+    void publish_visualizer_frame(const int16_t* pcm, unsigned long frame_count);
 
     void send_registration();
     void start_receive();
@@ -77,13 +81,6 @@ private:
 
     OpusDecoder* voice_decoder_{nullptr};
     PcmQueue voice_queue_;
-
-    static constexpr size_t VISUALIZER_BARS = 25;
-    std::function<void(const std::vector<float>&)> on_visualizer_data_;
-
-    void set_visualizer_callback(std::function<void(std::vector<float>)> cb) {
-        on_visualizer_data_ = std::move(cb);
-    }
 
     static int voice_pa_callback_wrapper(const void* input, void* output,
                                           unsigned long frame_count,
@@ -115,6 +112,8 @@ private:
     std::atomic<uint32_t> playback_position_ms_{0};
 
     std::vector<int16_t> last_frame_;
+    std::function<void(std::vector<float>)> visualizer_callback_;
+    std::chrono::steady_clock::time_point last_visualizer_callback_{};
 
     bool prebuffering_{true};
     static constexpr size_t PREBUFFER_FRAMES = 10;

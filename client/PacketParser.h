@@ -34,4 +34,9 @@ public:
         std::vector<TrackListEntry> tracks;
     };
     static std::optional<TrackListResult> parse_track_list(const std::vector<uint8_t>& body);
+
+    struct QueueListResult {
+        std::vector<QueueListEntry> tracks;
+    };
+    static std::optional<QueueListResult> parse_queue_list(const std::vector<uint8_t>& body);
 };

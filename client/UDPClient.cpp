@@ -1,6 +1,7 @@
 #include "UDPClient.h"
 #include "Logger.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 using boost::asio::ip::udp;
@@ -112,6 +113,54 @@ void UdpClient::stop() {
         opus_decoder_destroy(voice_decoder_);
         voice_decoder_ = nullptr;
     }
+}
+
+void UdpClient::SetVisualizerCallback(std::function<void(std::vector<float>)> callback) {
+    visualizer_callback_ = std::move(callback);
+}
+
+void UdpClient::publish_visualizer_frame(const int16_t* pcm, unsigned long frame_count) {
+    if (!visualizer_callback_) {
+        return;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    if (last_visualizer_callback_.time_since_epoch().count() != 0 &&
+        now - last_visualizer_callback_ < std::chrono::milliseconds(50)) {
+        return;
+    }
+    last_visualizer_callback_ = now;
+
+    constexpr size_t bar_count = 32;
+    std::vector<float> bars(bar_count, 0.0f);
+    if (!pcm || frame_count == 0) {
+        visualizer_callback_(std::move(bars));
+        return;
+    }
+
+    const size_t frames_per_bar = std::max<size_t>(1, frame_count / bar_count);
+    for (size_t bar = 0; bar < bar_count; ++bar) {
+        size_t begin = bar * frames_per_bar;
+        size_t end = (bar == bar_count - 1)
+            ? static_cast<size_t>(frame_count)
+            : std::min(static_cast<size_t>(frame_count), begin + frames_per_bar);
+        if (begin >= end) {
+            continue;
+        }
+
+        double sum = 0.0;
+        for (size_t frame = begin; frame < end; ++frame) {
+            int32_t left = pcm[frame * CHANNELS];
+            int32_t right = pcm[frame * CHANNELS + 1];
+            double mono = static_cast<double>(left + right) * 0.5 / 32768.0;
+            sum += mono * mono;
+        }
+
+        double rms = std::sqrt(sum / static_cast<double>(end - begin));
+        bars[bar] = static_cast<float>(std::clamp(rms * 3.0, 0.0, 1.0));
+    }
+
+    visualizer_callback_(std::move(bars));
 }
 
 void UdpClient::send_registration() {
@@ -287,9 +336,6 @@ void  UdpClient::handle_voice_packet(size_t bytes_received) {
     }
 
     voice_queue_.push(std::move(frame));
-
-    Logger::print("[voice] seq=" + std::to_string(seq) +
-              " queue_size=" + std::to_string(voice_queue_.size()));
 }
 
 int UdpClient::pa_callback_wrapper(const void* input, void* output,
@@ -304,6 +350,7 @@ int UdpClient::pa_callback_wrapper(const void* input, void* output,
 int UdpClient::process_audio(void* output, unsigned long frame_count) {
     int16_t* out = static_cast<int16_t*>(output);
     std::memset(out, 0, frame_count * CHANNELS * sizeof(int16_t));
+    bool rendered_music = false;
 
     if (prebuffering_) {
         if (pcm_queue_.size() >= PREBUFFER_FRAMES) {
@@ -335,14 +382,17 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
                 }
             }
 
-            for (size_t i = 0; i < frame.pcm.size(); i++) {
-                frame.pcm[i] = static_cast<int16_t>(frame.pcm[i] * current_volume_);
+            for (int16_t& sample : frame.pcm) {
+                sample = static_cast<int16_t>(sample * current_volume_);
             }
+
             std::memcpy(out, frame.pcm.data(), frame.pcm.size() * sizeof(int16_t));
             last_frame_ = frame.pcm;
-            playback_position_ms_.store(frame.pts_ms);
-            consecutive_underruns_ = 0;
 
+            playback_position_ms_.store(frame.pts_ms);
+
+            consecutive_underruns_ = 0;
+            rendered_music = true;
         } else {
             underruns_++;
             consecutive_underruns_++;
@@ -353,6 +403,8 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
             }
         }
     }
+
+    publish_visualizer_frame(rendered_music ? out : nullptr, frame_count);
 
     if (voice_queue_.size() == 0) {
         voice_prebuffering_ = true;
@@ -383,24 +435,6 @@ int UdpClient::process_audio(void* output, unsigned long frame_count) {
                 }
             }
         }
-    }
-
-    if (on_visualizer_data_) {
-        std::vector<float> bars(VISUALIZER_BARS, 0.0f);
-        size_t samples_per_bar = (frame_count * CHANNELS) / VISUALIZER_BARS;
-        if (samples_per_bar > 0) {
-            for (size_t b = 0; b < VISUALIZER_BARS; ++b) {
-                double sum_sq = 0;
-                size_t start = b * samples_per_bar;
-                size_t end = std::min(start + samples_per_bar, static_cast<size_t>(frame_count * CHANNELS));
-                for (size_t i = start; i < end; ++i) {
-                    sum_sq += static_cast<double>(out[i]) * out[i];
-                }
-                double rms = std::sqrt(sum_sq / (end - start));
-                bars[b] = static_cast<float>(std::clamp(rms / 8000.0, 0.0, 1.0));
-            }
-        }
-        on_visualizer_data_(bars);
     }
 
     return paContinue;

@@ -66,6 +66,15 @@ void ClientApp::set_upload_status(const std::string& status, bool is_error)
     });
 }
 
+void ClientApp::set_upload_progress(UploadProgress progress)
+{
+    boost::asio::post(io_context_, [this, progress = std::move(progress)] {
+        if (on_upload_progress_cb_) {
+            on_upload_progress_cb_(progress);
+        }
+    });
+}
+
 void ClientApp::finish_upload_status(const std::string& status, bool is_error)
 {
     {
@@ -129,6 +138,11 @@ void ClientApp::send_list_rooms()
 void ClientApp::send_list_tracks()
 {
     tcp_client_->send(PacketBuilder::list_tracks());
+}
+
+void ClientApp::send_list_queue()
+{
+    tcp_client_->send(PacketBuilder::list_queue());
 }
 
 void ClientApp::send_track_select(uint16_t track_id)
@@ -216,6 +230,11 @@ void ClientApp::send_upload_track(const std::string& path)
                 app->set_upload_status(status, is_error);
             }
         };
+        auto report_progress = [&self](UploadProgress progress) {
+            if (auto app = self.lock()) {
+                app->set_upload_progress(std::move(progress));
+            }
+        };
 
         if (path.empty()) {
             finish("choose a file first", true);
@@ -260,12 +279,15 @@ void ClientApp::send_upload_track(const std::string& path)
         }
 
         report("uploading " + filename + "...", false);
+        report_progress({filename, 0, size, false});
         tcp->send(PacketBuilder::upload_track_begin(
             room_id,
             static_cast<uint32_t>(size),
             filename));
 
         std::array<char, chunk_size> buffer{};
+        uintmax_t bytes_sent = 0;
+        int last_reported_percent = -1;
         while (file.good()) {
             file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
             std::streamsize read = file.gcount();
@@ -277,6 +299,14 @@ void ClientApp::send_upload_track(const std::string& path)
                 reinterpret_cast<uint8_t*>(buffer.data()),
                 reinterpret_cast<uint8_t*>(buffer.data()) + read);
             tcp->send(PacketBuilder::upload_track_data(chunk));
+            bytes_sent += static_cast<uintmax_t>(read);
+
+            int percent = static_cast<int>((bytes_sent * 100) / size);
+            if (percent != last_reported_percent && (percent == 100 || percent - last_reported_percent >= 5)) {
+                last_reported_percent = percent;
+                report("uploading " + filename + "... " + std::to_string(percent) + "%", false);
+            }
+            report_progress({filename, bytes_sent, size, false});
         }
 
         if (file.bad()) {
@@ -285,6 +315,7 @@ void ClientApp::send_upload_track(const std::string& path)
         }
 
         tcp->send(PacketBuilder::upload_track_end());
+        report_progress({filename, size, size, true});
         report("upload sent, waiting for server...", false);
     }).detach();
 }
@@ -302,6 +333,7 @@ void ClientApp::on_packet(PacketType type, const std::vector<uint8_t>& body)
         case PacketType::UserLeft:     on_user_left(body);    break;
         case PacketType::TrackAdded:   on_track_added(body);  break;
         case PacketType::TrackList:    on_track_list(body);   break;
+        case PacketType::QueueList:    on_queue_list(body);   break;
         case PacketType::VoiceStarted: on_voice_started(body); break;
         case PacketType::VoiceStopped: on_voice_stopped(body); break;
         case PacketType::Pong:         on_pong();             break;
@@ -315,6 +347,14 @@ void ClientApp::on_disconnect()
     state_.connected = false;
     state_.current_room_id = 0;
     state_.upload_in_progress = false;
+    {
+        std::lock_guard<std::mutex> lock(state_.track_list_mutex);
+        state_.track_list_cache.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_.queue_list_mutex);
+        state_.queue_list_cache.clear();
+    }
     if (udp_client_) {
         udp_client_->stop_voice_capture();
         udp_client_->stop();
@@ -381,6 +421,7 @@ void ClientApp::on_room_joined(const std::vector<uint8_t>& body)
     }
 
     send_list_tracks();
+    send_list_queue();
 }
 
 void ClientApp::start_udp(uint16_t udp_port)
@@ -401,6 +442,18 @@ void ClientApp::start_udp(uint16_t udp_port)
         udp_port,
         state_.client_id.load()
     );
+    std::weak_ptr<ClientApp> self = shared_from_this();
+    udp_client_->SetVisualizerCallback([self](std::vector<float> bars) {
+        if (auto app = self.lock()) {
+            boost::asio::post(app->io_context_, [self, bars = std::move(bars)]() mutable {
+                if (auto locked = self.lock()) {
+                    if (locked->on_visualizer_data_cb_) {
+                        locked->on_visualizer_data_cb_(std::move(bars));
+                    }
+                }
+            });
+        }
+    });
 
     if (!udp_client_->start()) {
         Logger::print("Failed to start UDP client");
@@ -420,6 +473,10 @@ void ClientApp::on_room_left()
     {
         std::lock_guard<std::mutex> lock(state_.track_list_mutex);
         state_.track_list_cache.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_.queue_list_mutex);
+        state_.queue_list_cache.clear();
     }
     Logger::print("RoomLeft");
     set_upload_status("", false);
@@ -504,6 +561,7 @@ void ClientApp::on_track_added(const std::vector<uint8_t>& body)
     }
 
     send_list_tracks();
+    send_list_queue();
 }
 
 void ClientApp::on_track_list(const std::vector<uint8_t>& body)
@@ -527,6 +585,30 @@ void ClientApp::on_track_list(const std::vector<uint8_t>& body)
     }
 
     if (on_track_list_updated_cb_) on_track_list_updated_cb_();
+}
+
+void ClientApp::on_queue_list(const std::vector<uint8_t>& body)
+{
+    auto parsed = PacketParser::parse_queue_list(body);
+    if (!parsed) {
+        Logger::print("bad QueueList body");
+        return;
+    }
+
+    std::string msg = "QueueList (" + std::to_string(parsed->tracks.size()) + "):";
+    for (const auto& track : parsed->tracks) {
+        msg += "\n  track_id=" + std::to_string(track.track_id) +
+               " current=" + std::to_string(track.is_current) +
+               " filename=" + track.filename;
+    }
+    Logger::print(msg);
+
+    {
+        std::lock_guard<std::mutex> lock(state_.queue_list_mutex);
+        state_.queue_list_cache = parsed->tracks;
+    }
+
+    if (on_queue_list_updated_cb_) on_queue_list_updated_cb_();
 }
 
 void ClientApp::on_voice_started(const std::vector<uint8_t>& body)
@@ -587,11 +669,16 @@ void ClientApp::on_error(const std::vector<uint8_t>& body)
     Logger::print(oss.str());
 
     StatusCode code = static_cast<StatusCode>(parsed->error_code);
+    if (on_error_cb_) {
+        on_error_cb_(code);
+    }
+
     if (code == StatusCode::UploadFailed ||
         code == StatusCode::FileTooLarge ||
         code == StatusCode::NoUploadInProgress ||
         code == StatusCode::UploadAlreadyInProgress ||
-        code == StatusCode::NotInRoom) {
+        code == StatusCode::NotInRoom ||
+        code == StatusCode::TrackNotFound) {
         finish_upload_status(status_to_string(code), true);
     }
 }
@@ -626,6 +713,8 @@ std::string ClientApp::status_to_string(StatusCode code)
             return "server has no upload in progress";
         case StatusCode::UploadAlreadyInProgress:
             return "server upload already in progress";
+        case StatusCode::TrackNotFound:
+            return "selected track is not available on the server";
         default:
             return "server error";
     }

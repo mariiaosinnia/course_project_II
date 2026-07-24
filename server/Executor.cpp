@@ -27,6 +27,7 @@ std::vector<uint8_t> Executor::execute(User& user, PacketType type,
         case PacketType::LeaveRoom: return handle_leave_room(user);
         case PacketType::ListRooms: return handle_list_rooms();
         case PacketType::ListTracks: return handle_list_tracks();
+        case PacketType::ListQueue: return handle_list_queue(user);
         case PacketType::TrackSelect: return handle_track_select(user, body);
         case PacketType::VoiceStart: return handle_voice_start(user);
         case PacketType::VoiceStop: return handle_voice_stop(user);
@@ -113,6 +114,13 @@ std::vector<uint8_t> Executor::handle_list_tracks() {
     return PacketBuilder::track_list(tracks);
 }
 
+std::vector<uint8_t> Executor::handle_list_queue(User& user) {
+    if (user.room_id == 0) {
+        return PacketBuilder::error(StatusCode::NotInRoom);
+    }
+    return PacketBuilder::queue_list(room_manager.list_queue(user.room_id));
+}
+
 std::vector<uint8_t> Executor::handle_track_select(User& user, const std::vector<uint8_t>& body) {
     if (user.room_id == 0) {
         return PacketBuilder::error(StatusCode::NotInRoom);
@@ -133,7 +141,15 @@ std::vector<uint8_t> Executor::handle_track_select(User& user, const std::vector
               << " room=" << room_id
               << " track_id=" << parsed->track_id << "\n";
 
-    std::vector<uint8_t> packet = PacketBuilder::track_added(room_id, parsed->track_id, "");
+    std::string filename;
+    for (const auto& track : room_manager.list_tracks()) {
+        if (track.track_id == parsed->track_id) {
+            filename = track.filename;
+            break;
+        }
+    }
+
+    std::vector<uint8_t> packet = PacketBuilder::track_added(room_id, parsed->track_id, filename.c_str());
     room_manager.broadcast_to_room(room_id, packet, user);
     return packet;
 }
