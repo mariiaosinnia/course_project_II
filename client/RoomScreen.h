@@ -85,6 +85,33 @@ public:
     void set_upload_progress(const UploadProgressView& progress);
     void set_track_added_confirmation(uint16_t track_id, const std::string& filename);
 
+#ifdef BUILD_TESTING
+    std::string test_upload_path() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return upload_path_;
+    }
+    bool test_upload_busy() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return upload_busy_;
+    }
+    bool test_has_upload_progress() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return has_upload_progress_;
+    }
+    UploadProgressView test_upload_progress() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return upload_progress_;
+    }
+    int test_selected_library_track() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return selected_library_track_;
+    }
+    int test_mood_index() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return mood_index_;
+    }
+#endif
+
 private:
     ftxui::ScreenInteractive& screen_;
     std::function<void()> on_leave_;

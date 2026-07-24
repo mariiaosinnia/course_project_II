@@ -28,6 +28,15 @@
             }
         },
         {
+            "name": "windows-msvc-tests",
+            "displayName": "Windows (MSVC x64, tests)",
+            "inherits": "windows-msvc",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "BUILD_TESTING": "ON"
+            }
+        },
+        {
             "name": "linux-gcc",
             "displayName": "Linux (GCC, Ninja)",
             "inherits": "base",
@@ -72,6 +81,12 @@
             "configuration": "Release"
         },
         {
+            "name": "windows-msvc-tests-debug",
+            "displayName": "Windows Debug Tests",
+            "configurePreset": "windows-msvc-tests",
+            "configuration": "Debug"
+        },
+        {
             "name": "linux-gcc-build",
             "displayName": "Linux Build",
             "configurePreset": "linux-gcc",
@@ -88,6 +103,22 @@
             "displayName": "macOS Build",
             "configurePreset": "macos-clang",
             "configuration": "Debug"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "windows-msvc-project-tests",
+            "displayName": "Windows Project Tests",
+            "configurePreset": "windows-msvc-tests",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "filter": {
+                "include": {
+                    "name": "^(Packet|Executor|RoomManager|UserManager|ServerMusicFlow|LobbyScreenTest|RoomScreenTest)"
+                }
+            }
         }
     ]
 }

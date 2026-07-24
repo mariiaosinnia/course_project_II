@@ -48,6 +48,16 @@ public:
     void set_username(const std::string& username);
     void set_status(const std::string& msg, bool is_error = false);
 
+#ifdef BUILD_TESTING
+    int test_selected_index() const {
+        std::lock_guard<std::mutex> lock(rooms_mutex_);
+        return selected_;
+    }
+    std::string test_new_room_name() const {
+        return new_room_name_;
+    }
+#endif
+
 private:
     ftxui::ScreenInteractive& screen_;
     std::string username_;

@@ -167,7 +167,7 @@ void LobbyScreen::build()
         if (input_name->Focused() && event.is_character()) {
             return false;
         }
-        if (input_name->Focused() && event == Event::Return) {
+        if (input_name->Focused() && event == Event::Return && !new_room_name_.empty()) {
             create_room();
             return true;
         }
