@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cmath>
 
 using boost::asio::ip::udp;
 

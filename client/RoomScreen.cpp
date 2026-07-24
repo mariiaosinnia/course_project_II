@@ -89,8 +89,16 @@ Element progress_bar(int percent)
 {
     constexpr int width = 34;
     int filled = std::clamp((percent * width) / 100, 0, width);
-    std::string bar(filled, '━');
-    bar += std::string(width - filled, '░');
+
+    std::string bar;
+    bar.reserve(width * 3); // Оптимізація пам'яті для UTF-8 символів
+    for (int i = 0; i < filled; ++i) {
+        bar += "━";
+    }
+    for (int i = 0; i < width - filled; ++i) {
+        bar += "░";
+    }
+
     return hbox({
         text("  uploading  ") | color(soft_text()),
         text(bar) | color(accent()),
