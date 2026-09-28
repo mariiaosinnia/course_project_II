@@ -1,4 +1,5 @@
 # course_project_II
+<img width="83" height="83" alt="Screenshot 2026-09-29 at 02 09 12" src="https://github.com/user-attachments/assets/21b095de-cfeb-49eb-9a2a-ddafbb2d017a" />
 
 ## Build and run
 
